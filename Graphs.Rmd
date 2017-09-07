@@ -1,0 +1,1204 @@
+---
+title: "State of Black Louisville"
+output: html_notebook
+---
+
+```{r "setup", include=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville")
+```
+
+Load libraries
+```{r}
+#State of Black Louisville Analysis
+
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(ggthemes)
+library(showtext)
+library(grid)
+library(scales)
+```
+
+Helper functions
+  acs_time reads in data from a folder of ACS CSVs
+  stl_wgt weights the values for the two counties that compose St. Louis to create a       single St. Louis observation
+  one_var_trend creates a trendline for a single variable
+  two_var_trend creates a trendline for two variables
+  
+```{r}
+acs_time<-function(directory,starting.year=2005){
+  setwd(directory)
+  file_names<-list.files()
+  n<-length(file_names)
+  y<-starting.year
+  for (i in 1:n){
+    data<-read.csv(file_names[i],header=TRUE, skip=1)
+    names(data)[names(data) == 'Id2'] <- 'FIPS'
+    all.peers <-subset(data, data$FIPS == 1073 |data$FIPS == 37119
+                       |data$FIPS == 39061 |data$FIPS == 39049
+                       |data$FIPS == 26081 |data$FIPS == 37081
+                       |data$FIPS == 45045 |data$FIPS == 18097
+                       |data$FIPS == 29095 |data$FIPS == 47093
+                       |data$FIPS == 21111 |data$FIPS == 47157
+                       |data$FIPS == 47037 |data$FIPS == 40109
+                       |data$FIPS == 31055 |data$FIPS == 29189
+                       |data$FIPS == 29510
+                       |data$FIPS == 40143 |data$FIPS == 39113
+                       |data$FIPS == 12031 |data$FIPS == 37183
+                       |data$FIPS == 37183 |data$FIPS == 51760)
+    
+    all.peers$year<-y
+    all.peers$baseline<-1
+    all.peers$current<-1
+    all.peers$baseline[all.peers$FIPS==26081|all.peers$FIPS==29189
+                       |all.peers$FIPS==29510|all.peers$FIPS==40109
+                       |all.peers$FIPS==40143|all.peers$FIPS==45045
+                       |all.peers$FIPS==47093]<-0
+    all.peers$current[all.peers$FIPS== 12031|all.peers$FIPS==37183|
+                        all.peers$FIPS==39113|all.peers$FIPS==51760]<-0
+    y<-y+1
+    
+    if(i==1){
+      df<-all.peers 
+    }
+    else{
+      names(all.peers)<-names(df)
+      df<-rbind(df, all.peers)
+    }
+  }
+  df
+}
+
+stl_wgt<-function(df,var){
+  df$var <- df[[var]]
+  stl.15<-subset(df, year==2015 & (FIPS==29189|FIPS==29510))
+  stl.wgt.15<-weighted.mean(stl.15$var, c(.761,.239))
+  
+  stl.14<-subset(df, year==2014 & (FIPS==29189|FIPS==29510))
+  stl.wgt.14<-weighted.mean(stl.14$var, c(.759,.241))
+  
+  stl.13<-subset(df, year==2013 & (FIPS==29189|FIPS==29510))
+  stl.wgt.13<-weighted.mean(stl.13$var, c(.759,.241))
+  
+  stl.12<-subset(df, year==2012 & (FIPS==29189|FIPS==29510))
+  stl.wgt.12<-weighted.mean(stl.12$var, c(.759,.241))
+  
+  stl.11<-subset(df, year==2011 & (FIPS==29189|FIPS==29510))
+  stl.wgt.11<-weighted.mean(stl.11$var, c(.758,.242))
+  
+  stl.10<-subset(df, year==2010 & (FIPS==29189|FIPS==29510))
+  stl.wgt.10<-weighted.mean(stl.10$var, c(.758,.242))
+  
+  stl.09<-subset(df, year==2009 & (FIPS==29189|FIPS==29510))
+  stl.wgt.09<-weighted.mean(stl.09$var, c(.736,.264))
+  
+  stl.08<-subset(df, year==2008 & (FIPS==29189|FIPS==29510))
+  stl.wgt.08<-weighted.mean(stl.08$var, c(.737,.263))
+  
+  stl.07<-subset(df, year==2007 & (FIPS==29189|FIPS==29510))
+  stl.wgt.07<-weighted.mean(stl.07$var, c(.739,.261))
+  
+  stl.06<-subset(df, year==2006 & (FIPS==29189|FIPS==29510))
+  stl.wgt.06<-weighted.mean(stl.06$var, c(.742,.258))
+  
+  stl.05<-subset(df, year==2005 & (FIPS==29189|FIPS==29510))
+  stl.wgt.05<-weighted.mean(stl.05$var, c(.747,.253))
+  
+  stl<-c(stl.wgt.15,stl.wgt.14,stl.wgt.13,stl.wgt.12,stl.wgt.11,stl.wgt.10,stl.wgt.09,
+         stl.wgt.08,stl.wgt.07,stl.wgt.06,stl.wgt.05)
+  year<-2015:2005
+  FIPS<-rep(0,11)
+  current<-rep(1,11)
+  stl.df<-cbind(FIPS,year,stl,current)
+  colnames(stl.df)<-c("FIPS","year",var,"current")
+  stl.df<-as.data.frame(stl.df)
+  stl.df
+}
+```
+
+Graphing functions
+```{r}
+one_var_trend = function(df, var, title, y_title = "Percent"){
+  df$var<-df[[var]]
+  p<-ggplot(data=df,aes(x=year,y=var))+
+    geom_point()+
+    geom_smooth()
+  p<-p+theme_bw()
+  p<-p+scale_x_continuous(breaks=seq(2005, 2015, 2))
+  p<-p+theme(text = element_text(family = "Museo Sans 300"))
+  p<-p+theme(legend.title=element_blank())
+  p<-p+theme(axis.title=element_text(family = "Museo Sans 300"))
+  p<-p+labs(title=title,x="Year",
+            y=y_title)
+  p<-p+theme(axis.text=element_text(size=12, family = "Museo Sans 300"))
+  p<-p+theme(axis.ticks.y=element_blank())
+  p<-p+theme(plot.title=element_text(color="black",size=18,face="bold",hjust=.5,
+                                     margin=margin(b=10,unit="pt"),family = "Museo Sans 300"))
+  p<-p+theme(legend.text=element_text(size=12, family = "Museo Sans 300"))
+  p
+}
+
+two_var_trend = function(df, var1, var2, var1_name, var2_name, 
+                         title,
+                         y_title="Percent", 
+                         colors = c("red", "skyblue3"),
+                         y_lower = 0, 
+                         y_upper = 60, 
+                         caption_text = "",
+                         y_lower_se = -50){
+  df$var1<-df[[var1]]
+  df$var2<-df[[var2]]
+  data_keep = df %>%
+    select(year, var1, var2)
+  data_long<-melt(data_keep, id="year")
+  p<-ggplot(data=data_long,
+            aes(x=year,y=value, shape=variable, linetype=variable, colour=variable))+
+    geom_point(size = 2)+
+    geom_smooth(show.legend = FALSE)+
+    scale_linetype_manual(values = c(1,5)) +
+    scale_shape_manual(values=c(19,15))
+  p<-p+theme_bw()
+  p<-p+scale_x_continuous(breaks=seq(2005, 2015, 2))
+  p<-p+theme(legend.title=element_blank())
+  p<-p+scale_shape(labels=c(var1_name, var2_name))
+  p<-p+scale_linetype_manual(values=c(1,5), labels=c(var1_name, var2_name))
+  p<-p+scale_colour_discrete(labels=c(var1_name, var2_name))
+  p<-p+scale_colour_manual(values = colors, labels = c(var1_name, var2_name))
+  p<-p+theme(axis.title=element_text(family = "Museo Sans 300"))
+  p<-p+labs(title=title,x="Year",
+          y=y_title, caption = caption_text)
+  p<-p+theme(axis.text=element_text(size=36, family = "Museo Sans 300"))
+  p<-p+theme(axis.title = element_text(size=36))
+  p<-p+theme(axis.ticks.y=element_blank())
+  p<-p+theme(plot.title=element_text(color="black",
+                                     size=54,
+                                     face="bold",
+                                     hjust=.5,
+                                     margin=margin(b=10,unit="pt"), 
+                                     family = "Museo Sans 300"))
+  p<-p+theme(legend.text=element_text(size=36, family = "Museo Sans 300"))+
+       guides(linetype=FALSE)
+  p<-p+theme(plot.caption = element_text(family = "Museo Sans 300",
+                                         size = 24,
+                                         lineheight = .3))
+  p<-p+theme(plot.margin = unit(c(.5,.25,.1,.5), "cm"))
+  p = p + ylim(y_lower_se, y_upper)
+  p <- p + coord_cartesian(ylim = c(y_lower, y_upper))
+  p <- p + scale_y_continuous(label=comma)
+  p
+}
+```
+
+UNEMPLOYMENT
+
+Read in unemployment data for black residents
+```{r}
+black_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Unemp Black")
+
+black_unemployment_data = black_unemployment_data %>% 
+  mutate(male_unemployed_16_24 = Estimate..Male....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....20.to.24.years....In.labor.force....Civilian....Unemployed,
+         male_unemployed = male_unemployed_16_24+
+           Estimate..Male....25.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....55.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Male....70.years.and.over....In.labor.force....Unemployed,
+         male_in_labor_force_16_24 = Estimate..Male....16.to.19.years....In.labor.force.+
+              Estimate..Male....20.to.24.years....In.labor.force.,
+         male_in_labor_force = male_in_labor_force_16_24+
+              Estimate..Male....25.to.54.years....In.labor.force.+
+              Estimate..Male....55.to.64.years....In.labor.force.+
+              Estimate..Male....65.to.69.years....In.labor.force.+
+              Estimate..Male....70.years.and.over....In.labor.force.,
+         male_unemployment = male_unemployed/male_in_labor_force,
+         male_unemployment_16_24 = male_unemployed_16_24/male_in_labor_force_16_24,
+         male_out_of_lf_25_54 = 1-(Estimate..Male....25.to.54.years....In.labor.force./Estimate..Male....25.to.54.years.),
+         female_unemployed_16_24 = Estimate..Female....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....20.to.24.years....In.labor.force....Civilian....Unemployed,
+         female_unemployed = female_unemployed_16_24+
+           Estimate..Female....25.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....55.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Female....70.years.and.over....In.labor.force....Unemployed,
+         female_in_labor_force_16_24 = Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Female....20.to.24.years....In.labor.force.,
+         female_in_labor_force = female_in_labor_force_16_24+
+           Estimate..Female....25.to.54.years....In.labor.force.+
+           Estimate..Female....55.to.64.years....In.labor.force.+
+           Estimate..Female....65.to.69.years....In.labor.force.+
+           Estimate..Female....70.years.and.over....In.labor.force.,
+         female_unemployment = female_unemployed/female_in_labor_force,
+         female_unemployment_16_24 = female_unemployed_16_24/female_in_labor_force_16_24,
+         female_out_of_lf_25_54 = 1-(Estimate..Female....25.to.54.years....In.labor.force./Estimate..Female....25.to.54.years.),
+         unemployment = (male_unemployed+female_unemployed)/(male_in_labor_force+female_in_labor_force),
+         unemployment_16_24 = (male_unemployed_16_24+female_unemployed_16_24)/(male_in_labor_force_16_24+female_in_labor_force_16_24))
+
+lville_black_unemployment = black_unemployment_data %>%
+  filter(FIPS == 21111)%>%
+  select(year, unemployment, male_unemployment, female_unemployment, male_unemployment_16_24, 
+         female_unemployment_16_24, male_out_of_lf_25_54,female_out_of_lf_25_54, unemployment_16_24)%>%
+  mutate(bl_unemployment = unemployment*100,
+         bl_male_unemployment = male_unemployment*100,
+         bl_female_unemployment = female_unemployment*100,
+         bl_male_unemployment_16_24 = male_unemployment_16_24*100,
+         bl_female_unemployment_16_24 = female_unemployment_16_24*100,
+         bl_male_out_of_lf_25_54 = male_out_of_lf_25_54*100,
+         bl_female_out_of_lf_25_54 = female_out_of_lf_25_54*100,
+         bl_unemployment_16_24 = unemployment_16_24*100)
+```
+
+Graph unemployment data for black residents
+```{r}
+one_var_trend(lville_black_unemployment, "bl_unemployment", "Black Unemployment Rate in Louisville")
+one_var_trend(lville_black_unemployment, "bl_male_unemployment","Black Male Unemployment Rate in Louisville")
+one_var_trend(lville_black_unemployment, "bl_female_unemployment", "Black Female Unemployment Rate in Louisville")
+one_var_trend(lville_black_unemployment, "bl_male_unemployment_16_24", "Louisville Black Male Unemployment Rate, Ages 16-24")
+one_var_trend(lville_black_unemployment, "bl_female_unemployment_16_24", "Louisville Black Female Unemployment Rate, Ages 16-24")
+one_var_trend(lville_black_unemployment, "bl_male_out_of_lf_25_54", "Louisville Black Male Out of Labor Force Rate, Ages 25-54")
+one_var_trend(lville_black_unemployment, "bl_female_out_of_lf_25_54", "Louisville Black Female Out of Labor Force Rate, Ages 25-54")
+```
+
+Read in unemployment data for white residents
+```{r}
+white_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Unemp White")
+white_unemployment_data = white_unemployment_data %>% 
+  mutate(male_unemployed_16_24 = Estimate..Male....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....20.to.24.years....In.labor.force....Civilian....Unemployed,
+         male_unemployed = male_unemployed_16_24+
+           Estimate..Male....25.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....55.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Male....70.years.and.over....In.labor.force....Unemployed,
+         male_in_labor_force_16_24 = Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Male....20.to.24.years....In.labor.force.,
+         male_in_labor_force = male_in_labor_force_16_24+
+           Estimate..Male....25.to.54.years....In.labor.force.+
+           Estimate..Male....55.to.64.years....In.labor.force.+
+           Estimate..Male....65.to.69.years....In.labor.force.+
+           Estimate..Male....70.years.and.over....In.labor.force.,
+         male_unemployment = male_unemployed/male_in_labor_force,
+         male_unemployment_16_24 = male_unemployed_16_24/male_in_labor_force_16_24,
+         male_out_of_lf_25_54 = 1-(Estimate..Male....25.to.54.years....In.labor.force./Estimate..Male....25.to.54.years.),
+         female_unemployed_16_24 = Estimate..Female....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....20.to.24.years....In.labor.force....Civilian....Unemployed,
+         female_unemployed = female_unemployed_16_24+
+           Estimate..Female....25.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....55.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Female....70.years.and.over....In.labor.force....Unemployed,
+         female_in_labor_force_16_24 = Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Female....20.to.24.years....In.labor.force.,
+         female_in_labor_force = female_in_labor_force_16_24+
+           Estimate..Female....25.to.54.years....In.labor.force.+
+           Estimate..Female....55.to.64.years....In.labor.force.+
+           Estimate..Female....65.to.69.years....In.labor.force.+
+           Estimate..Female....70.years.and.over....In.labor.force.,
+         female_unemployment = female_unemployed/female_in_labor_force,
+         female_unemployment_16_24 = female_unemployed_16_24/female_in_labor_force_16_24,
+         female_out_of_lf_25_54 = 1-(Estimate..Female....25.to.54.years....In.labor.force./Estimate..Female....25.to.54.years.),
+         unemployment = (male_unemployed+female_unemployed)/(male_in_labor_force+female_in_labor_force),
+         unemployment_16_24 = (male_unemployed_16_24+female_unemployed_16_24)/(male_in_labor_force_16_24+female_in_labor_force_16_24))
+
+lville_white_unemployment = white_unemployment_data %>%
+  filter(FIPS == 21111)%>%
+  select(year, unemployment, male_unemployment, female_unemployment, male_unemployment_16_24, 
+         female_unemployment_16_24, male_out_of_lf_25_54,female_out_of_lf_25_54, unemployment_16_24)%>%
+  mutate(wh_unemployment = unemployment*100,
+         wh_male_unemployment = male_unemployment*100,
+         wh_female_unemployment = female_unemployment*100,
+         wh_male_unemployment_16_24 = male_unemployment_16_24*100,
+         wh_female_unemployment_16_24 = female_unemployment_16_24*100,
+         wh_male_out_of_lf_25_54 = male_out_of_lf_25_54*100,
+         wh_female_out_of_lf_25_54 = female_out_of_lf_25_54*100,
+         wh_unemployment_16_24 = unemployment_16_24*100)
+
+lville_unemployment = full_join(lville_black_unemployment, lville_white_unemployment, by = "year")
+lville_unemployment = lville_unemployment %>%
+  mutate(unemp_ratio = bl_unemployment/wh_unemployment,
+         unemp_ratio_16_24 = bl_unemployment_16_24/wh_unemployment_16_24,
+         male_oolf_ratio = bl_male_out_of_lf_25_54/wh_male_out_of_lf_25_54,
+         female_oolf_ratio = bl_female_out_of_lf_25_54/wh_female_out_of_lf_25_54)
+```
+
+Graph unemployment data for black and white residents
+```{r}
+two_var_trend(lville_unemployment, "bl_unemployment", "wh_unemployment", "Black", "White", 
+              "Unemployment Rate in Louisville by Race, 2005-2015", colors = c("orange", "darkblue"))
+
+two_var_trend(lville_unemployment, "bl_male_unemployment", "wh_male_unemployment", "Black", "White", 
+              "Male Unemployment Rate in Louisville by Race, 2005-2015", colors = c("orange", "darkblue"))
+
+two_var_trend(lville_unemployment, "bl_female_unemployment", "wh_female_unemployment", "Black", "White", 
+              "Female Unemployment Rate in Louisville by Race, 2005-2015", colors = c("orange", "darkblue"))
+
+two_var_trend(lville_unemployment, "bl_male_unemployment_16_24", "wh_male_unemployment_16_24", "Black", "White", 
+              "Male Unemployment Rate in Louisville by Race, Ages 16-24", colors = c("orange", "darkblue"),
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+
+two_var_trend(lville_unemployment, "bl_female_unemployment_16_24", "wh_female_unemployment_16_24", "Black", "White", 
+              "Female Unemployment Rate in Louisville by Race, Ages 16-24", colors = c("orange", "darkblue"),
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+
+two_var_trend(lville_unemployment, "bl_unemployment_16_24", "wh_unemployment_16_24", "Black", "White", 
+              "Unemployment Rate in Louisville by Race, Ages 16-24", colors = c("orange", "darkblue"),
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+
+
+two_var_trend(lville_unemployment, "bl_male_out_of_lf_25_54", "wh_male_out_of_lf_25_54", "Black", "White", 
+              "Male Out of Labor Force Rate in Louisville by Race, Ages 24-55", colors = c("orange", "darkblue"),
+              y_upper = 35)
+
+two_var_trend(lville_unemployment, "bl_female_out_of_lf_25_54", "wh_female_out_of_lf_25_54", "Black", "White", 
+              "Female Out of Labor Force Rate in Louisville by Race, Ages 24-55", colors = c("orange", "darkblue"))
+
+two_var_trend(lville_unemployment, "bl_male_out_of_lf_25_54", "bl_female_out_of_lf_25_54", "Male", "Female", 
+              "Black Out of Labor Force Rate in Louisville by Gender, Ages 24-55")
+
+two_var_trend(lville_unemployment, "wh_male_out_of_lf_25_54", "wh_female_out_of_lf_25_54", "Male", "Female", 
+              "White Out of Labor Force Rate in Louisville by Gender, Ages 24-55")
+
+one_var_trend(lville_unemployment, "unemp_ratio", "Unemployment Black/White Ratio in Louisville", y_title = "Ratio")
+
+two_var_trend(lville_unemployment, "male_oolf_ratio", "female_oolf_ratio", "Male", "Female", 
+              "Out of Labor Force Black/White Ratio in Louisville by Gender,\n Ages 24-55",
+              y_title = "Ratio", y_lower = 0, y_upper = 4)
+```
+
+Peer city comparison
+```{r}
+peer_black_unemployment = black_unemployment_data %>%
+  filter(FIPS != 21111 & current == 1)%>%
+  select(FIPS, year, unemployment, male_unemployment, female_unemployment, male_unemployment_16_24, 
+         female_unemployment_16_24, male_out_of_lf_25_54,female_out_of_lf_25_54, unemployment_16_24)%>%
+  mutate(bl_unemployment = unemployment*100,
+         bl_male_unemployment = male_unemployment*100,
+         bl_female_unemployment = female_unemployment*100,
+         bl_male_unemployment_16_24 = male_unemployment_16_24*100,
+         bl_female_unemployment_16_24 = female_unemployment_16_24*100,
+         bl_male_out_of_lf_25_54 = male_out_of_lf_25_54*100,
+         bl_female_out_of_lf_25_54 = female_out_of_lf_25_54*100,
+         bl_unemployment_16_24 = unemployment_16_24*100)
+
+peer_white_unemployment = white_unemployment_data %>%
+  filter(FIPS != 21111  & current ==1)%>%
+  select(FIPS, year, unemployment, male_unemployment, female_unemployment, male_unemployment_16_24, 
+         female_unemployment_16_24, male_out_of_lf_25_54,female_out_of_lf_25_54, unemployment_16_24)%>%
+  mutate(wh_unemployment = unemployment*100,
+         wh_male_unemployment = male_unemployment*100,
+         wh_female_unemployment = female_unemployment*100,
+         wh_male_unemployment_16_24 = male_unemployment_16_24*100,
+         wh_female_unemployment_16_24 = female_unemployment_16_24*100,
+         wh_male_out_of_lf_25_54 = male_out_of_lf_25_54*100,
+         wh_female_out_of_lf_25_54 = female_out_of_lf_25_54*100,
+         wh_unemployment_16_24 = unemployment_16_24*100)
+
+peer_unemployment = full_join(peer_black_unemployment, peer_white_unemployment, by = c("year", "FIPS"))
+peer_unemployment = peer_unemployment %>%
+  mutate(peer_unemp_ratio = bl_unemployment/wh_unemployment,
+         peer_unemp_ratio_16_24 = bl_unemployment_16_24/wh_unemployment_16_24)%>%
+  select(FIPS, year, peer_unemp_ratio_16_24)
+  
+stl_data = stl_wgt(peer_unemployment, "peer_unemp_ratio_16_24")
+stl_data = stl_data %>%
+  select(FIPS, year, peer_unemp_ratio_16_24)
+
+peer_unemployment = rbind(peer_unemployment, stl_data)
+peer_unemployment = peer_unemployment %>%
+  filter(FIPS != 29189 & FIPS != 29510)
+
+peer_avg = peer_unemployment %>%
+  group_by(year) %>%
+  summarise(unemp_ratio_16_24 = mean(peer_unemp_ratio_16_24, na.rm=TRUE))
+  
+lville_unemp_ratio = lville_unemployment %>%
+  select(year, lv_unemp_ratio = unemp_ratio_16_24)
+peer_and_lville = full_join(peer_avg, lville_unemp_ratio, by = "year")
+
+two_var_trend(peer_and_lville, "lv_unemp_ratio", "unemp_ratio_16_24", "Louisville", "Peer City Mean", 
+              "Black/White Unemployment Ratio in Louisville and Peer Cities \n Ages 16-24",
+              y_title = "Ratio", colors = c("purple", "green"), y_lower = 0, y_upper = 4,
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+
+
+#black unemployment peer cities
+peer_unemployment = full_join(peer_black_unemployment, peer_white_unemployment, by = c("year", "FIPS"))
+peer_unemployment = peer_unemployment %>%
+  select(FIPS, year, bl_unemployment_16_24)
+
+stl_data = stl_wgt(peer_unemployment, "bl_unemployment_16_24")
+stl_data = stl_data %>%
+  select(FIPS, year, bl_unemployment_16_24)
+
+peer_unemployment = rbind(peer_unemployment, stl_data)
+peer_unemployment = peer_unemployment %>%
+  filter(FIPS != 29189 & FIPS != 29510)
+
+peer_avg = peer_unemployment %>%
+  group_by(year) %>%
+  summarise(bl_unemployment_16_24 = mean(bl_unemployment_16_24, na.rm=TRUE))
+
+lville_unemp = lville_unemployment %>%
+  select(year, lv_bl_unemp = bl_unemployment_16_24)
+peer_and_lville = full_join(peer_avg, lville_unemp, by = "year")
+
+two_var_trend(peer_and_lville, "lv_bl_unemp", "bl_unemployment_16_24", "Louisville", "Peer City Mean", 
+              "Black Unemployment in Louisville and Peer Cities, Ages 16-24", colors = c("purple", "green"),
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Table B23002B")
+
+
+#white unemployment peer cities, 16-24
+peer_unemployment = full_join(peer_black_unemployment, peer_white_unemployment, by = c("year", "FIPS"))
+peer_unemployment = peer_unemployment %>%
+  select(FIPS, year, wh_unemployment_16_24)
+
+stl_data = stl_wgt(peer_unemployment, "wh_unemployment_16_24")
+stl_data = stl_data %>%
+  select(FIPS, year, wh_unemployment_16_24)
+
+peer_unemployment = rbind(peer_unemployment, stl_data)
+peer_unemployment = peer_unemployment %>%
+  filter(FIPS != 29189 & FIPS != 29510)
+
+peer_avg = peer_unemployment %>%
+  group_by(year) %>%
+  summarise(wh_unemployment_16_24 = mean(wh_unemployment_16_24, na.rm=TRUE))
+
+lville_unemp = lville_unemployment %>%
+  select(year, lv_wh_unemp = wh_unemployment_16_24)
+peer_and_lville = full_join(peer_avg, lville_unemp, by = "year")
+
+two_var_trend(peer_and_lville, "lv_wh_unemp", "wh_unemployment_16_24", "Louisville", "Peer City Mean", 
+              "White Unemployment in Louisville and Peer Cities, Ages 16-24", colors = c("purple", "green"),
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Table B23002A")
+```
+
+EDUCATION
+
+Read in data for black educational attainment
+```{r}
+black_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Education/Black",
+                           starting.year = 2008)
+
+black_educ_data = black_educ_data %>%
+  mutate(male_hs_higher_num = Estimate..Male....Regular.high.school.diploma+
+           Estimate..Male....GED.or.alternative.credential+
+           Estimate..Male....Some.college..no.degree+
+           Estimate..Male....Associate.s.degree+
+           Estimate..Male....Bachelor.s.degree+
+           Estimate..Male....Graduate.degree,
+         male_associate_higher_num = Estimate..Male....Associate.s.degree+
+           Estimate..Male....Bachelor.s.degree+
+           Estimate..Male....Graduate.degree,
+         male_bachelors_higher_num = Estimate..Male....Bachelor.s.degree+
+           Estimate..Male....Graduate.degree,
+         m_hs_higher_pct = male_hs_higher_num/Estimate..Male.,
+         m_assoc_higher_pct = male_associate_higher_num/Estimate..Male.,
+         m_bach_higher_pct = male_bachelors_higher_num/Estimate..Male.,
+         m_no_hs_pct = (Estimate..Male....Less.than.9th.grade+
+           Estimate..Male....9th.to.12th.grade..no.diploma)/Estimate..Male.,
+         m_hs_pct = (Estimate..Male....Regular.high.school.diploma+
+           Estimate..Male....GED.or.alternative.credential)/Estimate..Male.,
+         m_some_pct = Estimate..Male....Some.college..no.degree/Estimate..Male.,
+         m_assoc_pct = Estimate..Male....Associate.s.degree/Estimate..Male.,
+         m_bach_pct = Estimate..Male....Bachelor.s.degree/Estimate..Male.,
+         m_grad_pct = Estimate..Male....Graduate.degree/Estimate..Male.,
+         
+         female_hs_higher_num = Estimate..Female....Regular.high.school.diploma+
+           Estimate..Female....GED.or.alternative.credential+
+           Estimate..Female....Some.college..no.degree+
+           Estimate..Female....Associate.s.degree+
+           Estimate..Female....Bachelor.s.degree+
+           Estimate..Female....Graduate.degree,
+         female_associate_higher_num = Estimate..Female....Associate.s.degree+
+           Estimate..Female....Bachelor.s.degree+
+           Estimate..Female....Graduate.degree,
+         female_bachelors_higher_num = Estimate..Female....Bachelor.s.degree+
+           Estimate..Female....Graduate.degree,
+         f_hs_higher_pct = female_hs_higher_num/Estimate..Female.,
+         f_assoc_higher_pct = female_associate_higher_num/Estimate..Female.,
+         f_bach_higher_pct = female_bachelors_higher_num/Estimate..Female.,
+         f_no_hs_pct = (Estimate..Female....Less.than.9th.grade+
+                          Estimate..Female....9th.to.12th.grade..no.diploma)/Estimate..Female.,
+         f_hs_pct = (Estimate..Female....Regular.high.school.diploma+
+                       Estimate..Female....GED.or.alternative.credential)/Estimate..Female.,
+         f_some_pct = Estimate..Female....Some.college..no.degree/Estimate..Female.,
+         f_assoc_pct = Estimate..Female....Associate.s.degree/Estimate..Female.,
+         f_bach_pct = Estimate..Female....Bachelor.s.degree/Estimate..Female.,
+         f_grad_pct = Estimate..Female....Graduate.degree/Estimate..Female.,
+         
+         hs_higher_pct = (male_hs_higher_num+female_hs_higher_num)/Estimate..Total.,
+         assoc_higher_pct = (male_associate_higher_num+female_associate_higher_num)/Estimate..Total.,
+         bach_higher_pct = (male_bachelors_higher_num+female_bachelors_higher_num)/Estimate..Total.)
+
+lville_black_educ = black_educ_data %>%
+  filter(FIPS == 21111)%>%
+  select(year, m_hs_higher_pct, m_assoc_higher_pct, m_bach_higher_pct, m_no_hs_pct, m_hs_pct, m_some_pct, m_assoc_pct,
+         m_bach_pct, m_grad_pct,
+         f_hs_higher_pct, f_assoc_higher_pct, f_bach_higher_pct, f_no_hs_pct, f_hs_pct, f_some_pct, f_assoc_pct,
+         f_bach_pct, f_grad_pct,
+         hs_higher_pct, assoc_higher_pct, bach_higher_pct)
+
+lville_black_educ[,2:22]=lville_black_educ[,2:22]*100
+```
+
+Graph data for black educational attainment
+```{r}
+two_var_trend(lville_black_educ, "m_hs_higher_pct", "f_hs_higher_pct", "Male", "Female", 
+              "Percent Black Residents with High School Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_black_educ, "m_assoc_higher_pct", "f_assoc_higher_pct", "Male", "Female", 
+              "Percent Black Residents with Associate's Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_black_educ, "m_bach_higher_pct", "f_bach_higher_pct", "Male", "Female", 
+              "Percent Black Residents with Bachelor's Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
+```
+
+Read in data for white educational attainment
+```{r}
+##White education
+white_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Education/White",
+                           starting.year = 2008)
+
+white_educ_data = white_educ_data %>%
+  mutate(male_hs_higher_num = Estimate..Male....Regular.high.school.diploma+
+           Estimate..Male....GED.or.alternative.credential+
+           Estimate..Male....Some.college..no.degree+
+           Estimate..Male....Associate.s.degree+
+           Estimate..Male....Bachelor.s.degree+
+           Estimate..Male....Graduate.degree,
+         male_associate_higher_num = Estimate..Male....Associate.s.degree+
+           Estimate..Male....Bachelor.s.degree+
+           Estimate..Male....Graduate.degree,
+         male_bachelors_higher_num = Estimate..Male....Bachelor.s.degree+
+           Estimate..Male....Graduate.degree,
+         m_hs_higher_pct = male_hs_higher_num/Estimate..Male.,
+         m_assoc_higher_pct = male_associate_higher_num/Estimate..Male.,
+         m_bach_higher_pct = male_bachelors_higher_num/Estimate..Male.,
+         m_no_hs_pct = (Estimate..Male....Less.than.9th.grade+
+                          Estimate..Male....9th.to.12th.grade..no.diploma)/Estimate..Male.,
+         m_hs_pct = (Estimate..Male....Regular.high.school.diploma+
+                       Estimate..Male....GED.or.alternative.credential)/Estimate..Male.,
+         m_some_pct = Estimate..Male....Some.college..no.degree/Estimate..Male.,
+         m_assoc_pct = Estimate..Male....Associate.s.degree/Estimate..Male.,
+         m_bach_pct = Estimate..Male....Bachelor.s.degree/Estimate..Male.,
+         m_grad_pct = Estimate..Male....Graduate.degree/Estimate..Male.,
+         
+         female_hs_higher_num = Estimate..Female....Regular.high.school.diploma+
+           Estimate..Female....GED.or.alternative.credential+
+           Estimate..Female....Some.college..no.degree+
+           Estimate..Female....Associate.s.degree+
+           Estimate..Female....Bachelor.s.degree+
+           Estimate..Female....Graduate.degree,
+         female_associate_higher_num = Estimate..Female....Associate.s.degree+
+           Estimate..Female....Bachelor.s.degree+
+           Estimate..Female....Graduate.degree,
+         female_bachelors_higher_num = Estimate..Female....Bachelor.s.degree+
+           Estimate..Female....Graduate.degree,
+         f_hs_higher_pct = female_hs_higher_num/Estimate..Female.,
+         f_assoc_higher_pct = female_associate_higher_num/Estimate..Female.,
+         f_bach_higher_pct = female_bachelors_higher_num/Estimate..Female.,
+         f_no_hs_pct = (Estimate..Female....Less.than.9th.grade+
+                          Estimate..Female....9th.to.12th.grade..no.diploma)/Estimate..Female.,
+         f_hs_pct = (Estimate..Female....Regular.high.school.diploma+
+                       Estimate..Female....GED.or.alternative.credential)/Estimate..Female.,
+         f_some_pct = Estimate..Female....Some.college..no.degree/Estimate..Female.,
+         f_assoc_pct = Estimate..Female....Associate.s.degree/Estimate..Female.,
+         f_bach_pct = Estimate..Female....Bachelor.s.degree/Estimate..Female.,
+         f_grad_pct = Estimate..Female....Graduate.degree/Estimate..Female.,
+         
+         hs_higher_pct = (male_hs_higher_num+female_hs_higher_num)/Estimate..Total.,
+         assoc_higher_pct = (male_associate_higher_num+female_associate_higher_num)/Estimate..Total.,
+         bach_higher_pct = (male_bachelors_higher_num+female_bachelors_higher_num)/Estimate..Total.)
+
+lville_white_educ = white_educ_data %>%
+  filter(FIPS == 21111)%>%
+  select(year, m_hs_higher_pct, m_assoc_higher_pct, m_bach_higher_pct, m_no_hs_pct, m_hs_pct, m_some_pct, m_assoc_pct,
+         m_bach_pct, m_grad_pct,
+         f_hs_higher_pct, f_assoc_higher_pct, f_bach_higher_pct, f_no_hs_pct, f_hs_pct, f_some_pct, f_assoc_pct,
+         f_bach_pct, f_grad_pct,
+         hs_higher_pct, assoc_higher_pct, bach_higher_pct)
+
+lville_white_educ[,2:22]=lville_white_educ[,2:22]*100
+```
+
+Create histogram plot
+```{r}
+lville_bl_ed_hist = lville_black_educ %>%
+  filter(year >=2011)
+
+attach(lville_bl_ed_hist)
+lville_bl_m_educ = c(mean(m_no_hs_pct),mean(m_hs_pct), mean(m_some_pct), mean(m_assoc_pct), mean(m_bach_pct), mean(m_grad_pct))
+lville_bl_f_educ = c(mean(f_no_hs_pct),mean(f_hs_pct), mean(f_some_pct), mean(f_assoc_pct), mean(f_bach_pct), mean(f_grad_pct))
+detach(lville_bl_ed_hist)
+
+lville_wh_ed_hist = lville_white_educ %>%
+  filter(year >=2011)
+
+attach(lville_wh_ed_hist)
+lville_wh_m_educ = c(mean(m_no_hs_pct),mean(m_hs_pct), mean(m_some_pct), mean(m_assoc_pct), mean(m_bach_pct), mean(m_grad_pct))
+lville_wh_f_educ = c(mean(f_no_hs_pct),mean(f_hs_pct), mean(f_some_pct), mean(f_assoc_pct), mean(f_bach_pct), mean(f_grad_pct))
+detach(lville_wh_ed_hist)
+educ_names = c("No HS", "HS", "Some College", "Associate's", "Bachelor's", "Graduate", 
+               "No HS", "HS", "Some College", "Associate's", "Bachelor's", "Graduate",
+               "No HS", "HS", "Some College", "Associate's", "Bachelor's", "Graduate",
+               "No HS", "HS", "Some College", "Associate's", "Bachelor's", "Graduate")
+gender = c("Black Male", "Black Male", "Black Male", "Black Male", "Black Male", "Black Male", 
+           "Black Female", "Black Female", "Black Female", "Black Female", "Black Female", "Black Female",
+           "White Male", "White Male", "White Male", "White Male", "White Male", "White Male", 
+           "White Female", "White Female", "White Female", "White Female", "White Female", "White Female")
+percent = c(lville_bl_m_educ, lville_bl_f_educ, lville_wh_m_educ, lville_wh_f_educ)
+
+lville_ed_hist = data.frame(educ_names, gender, percent)
+
+##setting factor levels
+lville_ed_hist$educ_names = factor(lville_ed_hist$educ_names, levels = c(
+  "No HS", "HS", "Some College", "Associate's","Bachelor's","Graduate"))
+```
+
+continuing graphing education data
+```{r}
+##renaming so I can combine data sets and plot black/white gap
+lville_white_educ = lville_white_educ %>%
+  select(wh_m_hs_higher_pct = m_hs_higher_pct,
+         wh_m_assoc_higher_pct = m_assoc_higher_pct,
+         wh_m_bach_higher_pct = m_bach_higher_pct,
+         wh_f_hs_higher_pct = f_hs_higher_pct,
+         wh_f_assoc_higher_pct = f_assoc_higher_pct,
+         wh_f_bach_higher_pct = f_bach_higher_pct,
+         year)
+
+lville_black_educ = lville_black_educ %>%
+  select(bl_m_hs_higher_pct = m_hs_higher_pct,
+         bl_m_assoc_higher_pct = m_assoc_higher_pct,
+         bl_m_bach_higher_pct = m_bach_higher_pct,
+         bl_f_hs_higher_pct = f_hs_higher_pct,
+         bl_f_assoc_higher_pct = f_assoc_higher_pct,
+         bl_f_bach_higher_pct = f_bach_higher_pct,
+         year)
+
+lville_educ = full_join(lville_black_educ, lville_white_educ, by="year")
+
+two_var_trend(lville_educ, "bl_m_bach_higher_pct", "wh_m_bach_higher_pct", "Black", "White", 
+              "Percent Male Residents with Bachelor's Degree or Higher \n in Louisville by Race",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_educ, "bl_f_bach_higher_pct", "wh_f_bach_higher_pct", "Black", "White", 
+              "Percent Female Residents with Bachelor's Degree or Higher \n in Louisville by Race",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_educ, "bl_m_assoc_higher_pct", "wh_m_assoc_higher_pct", "Black", "White", 
+              "Percent Male Residents with Associate's Degree or Higher \n in Louisville by Race",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_educ, "bl_f_assoc_higher_pct", "wh_f_assoc_higher_pct", "Black", "White", 
+              "Percent Female Residents with Associate's Degree or Higher \n in Louisville by Race",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_educ, "bl_m_hs_higher_pct", "wh_m_hs_higher_pct", "Black", "White", 
+              "Percent Male Residents with High School Degree or Higher \n in Louisville by Race",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_educ, "bl_f_hs_higher_pct", "wh_f_hs_higher_pct", "Black", "White", 
+              "Percent Female Residents with High School Degree or Higher \n in Louisville by Race",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 100)
+
+```
+
+INCOME
+
+Read in black and white income data
+```{r}
+black_income_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Income/Black")
+
+black_income_data = black_income_data %>% 
+  select(bl_m_income = Estimate..Male......Total,
+         bl_ft_m_income = Estimate..Male......Worked.full.time..year.round.in.the.past.12.months,
+         bl_f_income = Estimate..Female......Total,
+         bl_ft_f_income = Estimate..Female......Worked.full.time..year.round.in.the.past.12.months,
+         FIPS, year) %>%
+  mutate(bl_m_income = as.numeric(as.character(bl_m_income)),
+         bl_ft_m_income = as.numeric(as.character(bl_ft_m_income)),
+         bl_f_income = as.numeric(as.character(bl_f_income)),
+         bl_ft_f_income = as.numeric(as.character(bl_ft_f_income)))
+
+white_income_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Income/White")
+
+white_income_data = white_income_data %>% 
+  select(wh_m_income = Estimate..Male......Total,
+         wh_ft_m_income = Estimate..Male......Worked.full.time..year.round.in.the.past.12.months,
+         wh_f_income = Estimate..Female......Total,
+         wh_ft_f_income = Estimate..Female......Worked.full.time..year.round.in.the.past.12.months,
+         FIPS, year) %>%
+  mutate(wh_m_income = as.numeric(wh_m_income),
+         wh_ft_m_income = as.numeric(wh_ft_m_income),
+         wh_f_income = as.numeric(wh_f_income),
+         wh_ft_f_income = as.numeric(wh_ft_f_income))
+
+l_black_income_data = black_income_data %>%
+  filter(FIPS == 21111)
+
+l_white_income_data = white_income_data %>%
+  filter(FIPS == 21111)
+
+lville_income_data = full_join(l_black_income_data, l_white_income_data, by = "year")
+```
+
+Graph income data
+```{r}
+two_var_trend(lville_income_data, "bl_m_income", "wh_m_income", "Black", "White", 
+              "Median Male Earnings by Race in Louisville", y_title = "Dollars",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(lville_income_data, "bl_ft_m_income", "wh_ft_m_income", "Black", "White", 
+              "Median Male Earnings for Full-Time Year-Round Workers \n by Race in Louisville", y_title = "Dollars",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(lville_income_data, "bl_f_income", "wh_f_income", "Black", "White", 
+              "Median Female Earnings by Race in Louisville", y_title = "Dollars",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(lville_income_data, "bl_ft_f_income", "wh_ft_f_income", "Black", "White", 
+              "Median Female Earnings for Full-Time Year-Round Workers \n by Race in Louisville", y_title = "Dollars",
+              colors = c("orange", "darkblue"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(lville_income_data, "bl_ft_f_income", "bl_ft_m_income", "Female", "Male", 
+              "Median Earnings for Full-Time Year-Round Black Workers \n by Gender in Louisville", y_title = "Dollars",
+              y_lower = 0 , y_upper = 60000)
+
+two_var_trend(lville_income_data, "wh_ft_f_income", "wh_ft_m_income", "Female", "Male", 
+              "Median Earnings for Full-Time Year-Round White Workers \n by Gender in Louisville", y_title = "Dollars",
+              y_lower = 0, y_upper = 60000)
+```
+
+Peer city comparison
+```{r}
+income_data = full_join(black_income_data, white_income_data, by = c("year", "FIPS"))
+income_data = income_data %>% 
+  filter(FIPS != 21111)
+ 
+stl_bl_m = stl_wgt(income_data, "bl_m_income")
+stl_bl_ft_m = stl_wgt(income_data, "bl_ft_m_income")
+stl_bl_f = stl_wgt(income_data, "bl_f_income")
+stl_bl_ft_f = stl_wgt(income_data, "bl_ft_f_income")
+stl_wh_m = stl_wgt(income_data, "wh_m_income")
+stl_wh_ft_m = stl_wgt(income_data, "wh_ft_m_income")
+stl_wh_f = stl_wgt(income_data, "wh_f_income")
+stl_wh_ft_f = stl_wgt(income_data, "wh_ft_f_income")
+
+stl_inc = full_join(stl_bl_m, stl_bl_ft_m, by= c("FIPS", "year", "current"))
+stl_inc = full_join(stl_inc, stl_bl_f, by = c("FIPS", "year", "current"))
+stl_inc = full_join(stl_inc, stl_bl_ft_f, by = c("FIPS", "year", "current"))
+stl_inc = full_join(stl_inc, stl_wh_m, by = c("FIPS", "year", "current"))
+stl_inc = full_join(stl_inc, stl_wh_ft_m, by = c("FIPS", "year", "current"))
+stl_inc = full_join(stl_inc, stl_wh_f, by = c("FIPS", "year", "current"))
+stl_inc = full_join(stl_inc, stl_wh_ft_f, by = c("FIPS", "year", "current"))
+
+stl_inc = stl_inc %>%
+  select(-current)
+
+income_data = income_data[c("FIPS", "year", "bl_m_income", "bl_ft_m_income", "bl_f_income", "bl_ft_f_income",
+                            "wh_m_income", "wh_ft_m_income","wh_f_income","wh_ft_f_income")]#reordering
+
+names(income_data)==names(stl_inc)##testing that dataframes are lined up
+peer_inc_data = rbind(income_data, stl_inc)
+
+pm_inc_data = peer_inc_data %>%
+  group_by(year) %>%
+  summarize(
+    p_bl_m_income = mean(bl_m_income, na.rm=TRUE),
+    p_bl_ft_m_income = mean(bl_ft_m_income, na.rm=TRUE),
+    p_bl_f_income = mean(bl_f_income, na.rm=TRUE),
+    p_bl_ft_f_income = mean(bl_ft_f_income, na.rm=TRUE),
+    p_wh_m_income = mean(wh_m_income, na.rm=TRUE),
+    p_wh_ft_m_income = mean(wh_ft_m_income, na.rm=TRUE),
+    p_wh_f_income = mean(wh_f_income, na.rm=TRUE),
+    p_wh_ft_f_income = mean(wh_ft_f_income, na.rm=TRUE)
+  )
+
+
+l_and_pm_inc = full_join(lville_income_data, pm_inc_data, by = "year")
+
+l_and_pm_inc = l_and_pm_inc %>%
+  mutate(
+    l_m_income_gap = wh_m_income - bl_m_income,
+    l_ft_m_income_gap = wh_ft_m_income - bl_ft_m_income,
+    l_f_income_gap = wh_f_income - bl_f_income,
+    l_ft_f_income_gap = wh_ft_f_income - bl_ft_f_income,
+    p_m_income_gap = p_wh_m_income - p_bl_m_income,
+    p_ft_m_income_gap = p_wh_ft_m_income - p_bl_ft_m_income,
+    p_f_income_gap = p_wh_f_income - p_bl_f_income,
+    p_ft_f_income_gap = p_wh_ft_f_income - p_bl_ft_f_income
+  )
+
+two_var_trend(l_and_pm_inc, "bl_m_income", "p_bl_m_income", "Louisivlle", "Peer City Mean", 
+              "Median Income for Black Males", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(l_and_pm_inc, "bl_ft_m_income", "p_bl_ft_m_income", "Louisivlle", "Peer City Mean", 
+              "Median Income for Black Males working Full-Time Year-Round", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(l_and_pm_inc, "bl_f_income", "p_bl_f_income", "Louisivlle", "Peer City Mean", 
+              "Median Income for Black Females", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(l_and_pm_inc, "bl_ft_f_income", "p_bl_ft_f_income", "Louisivlle", "Peer City Mean", 
+              "Median Income for Black Females working Full-Time Year-Round", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(l_and_pm_inc, "l_m_income_gap", "p_m_income_gap", "Louisivlle", "Peer City Mean", 
+              "Difference in Median Income between \n White and Black Males", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(l_and_pm_inc, "l_ft_m_income_gap", "p_ft_m_income_gap", "Louisivlle", "Peer City Mean", 
+              "Difference in Median Income between \n White and Black Males, Full-Time Year-Round", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(l_and_pm_inc, "l_f_income_gap", "p_f_income_gap", "Louisivlle", "Peer City Mean", 
+              "Difference in Median Income between \n White and Black Females", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+
+two_var_trend(l_and_pm_inc, "l_ft_f_income_gap", "p_ft_f_income_gap", "Louisivlle", "Peer City Mean", 
+              "Difference in Median Income between \n White and Black Females, Full-Time Year-Round", y_title = "Dollars",
+              colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
+```
+
+POVERTY
+
+Read in poverty data
+```{r}
+
+black_pov_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Poverty/Black")
+
+black_pov_data = black_pov_data %>%
+  mutate(num_m_child_poor = Estimate..Income.in.the.past.12.months.below.poverty.level....Male....Under.5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....15.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....16.and.17.years,
+         num_f_child_poor = Estimate..Income.in.the.past.12.months.below.poverty.level....Female....Under.5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....15.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....16.and.17.years,
+         num_m_child_not_poor = Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....Under.5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....15.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....16.and.17.years,
+         num_f_child_not_poor = Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....Under.5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....15.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....16.and.17.years,
+         child_pov = (num_m_child_poor+num_f_child_poor)/(num_m_child_poor+num_m_child_not_poor+
+                                                            num_f_child_poor+num_f_child_not_poor),
+         pov = Estimate..Income.in.the.past.12.months.below.poverty.level./Estimate..Total.,
+         m_pov = Estimate..Income.in.the.past.12.months.below.poverty.level....Male./
+           (Estimate..Income.in.the.past.12.months.below.poverty.level....Male. + 
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male.),
+         f_pov = Estimate..Income.in.the.past.12.months.below.poverty.level....Female./
+           (Estimate..Income.in.the.past.12.months.below.poverty.level....Female.+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female.)
+          )
+
+black_pov_data = black_pov_data %>%
+  mutate(child_pov = child_pov*100,
+         m_pov = m_pov*100,
+         f_pov = f_pov*100,
+         pov = pov*100) %>%
+  select(FIPS, year, bl_child_pov = child_pov, bl_m_pov = m_pov, bl_f_pov = f_pov, bl_pov = pov)
+
+
+white_pov_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Poverty/White")
+
+white_pov_data = white_pov_data %>%
+  mutate(num_m_child_poor = Estimate..Income.in.the.past.12.months.below.poverty.level....Male....Under.5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....15.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Male....16.and.17.years,
+         num_f_child_poor = Estimate..Income.in.the.past.12.months.below.poverty.level....Female....Under.5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....5.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....15.years+
+           Estimate..Income.in.the.past.12.months.below.poverty.level....Female....16.and.17.years,
+         num_m_child_not_poor = Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....Under.5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....15.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male....16.and.17.years,
+         num_f_child_not_poor = Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....Under.5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....5.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....6.to.11.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....12.to.14.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....15.years+
+           Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female....16.and.17.years,
+         child_pov = (num_m_child_poor+num_f_child_poor)/(num_m_child_poor+num_m_child_not_poor+
+                                                            num_f_child_poor+num_f_child_not_poor),
+         pov = Estimate..Income.in.the.past.12.months.below.poverty.level./Estimate..Total.,
+         m_pov = Estimate..Income.in.the.past.12.months.below.poverty.level....Male./
+           (Estimate..Income.in.the.past.12.months.below.poverty.level....Male. + 
+              Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Male.),
+         f_pov = Estimate..Income.in.the.past.12.months.below.poverty.level....Female./
+           (Estimate..Income.in.the.past.12.months.below.poverty.level....Female.+
+              Estimate..Income.in.the.past.12.months.at.or.above.poverty.level....Female.)
+  )
+
+white_pov_data = white_pov_data %>%
+  mutate(child_pov = child_pov*100,
+         m_pov = m_pov*100,
+         f_pov = f_pov*100,
+         pov = pov*100) %>%
+  select(FIPS, year, wh_child_pov = child_pov, wh_m_pov = m_pov, wh_f_pov = f_pov, wh_pov = pov)
+
+pov_data = full_join(black_pov_data, white_pov_data, by=c("FIPS", "year"))
+
+l_pov_data = pov_data %>%
+  filter(FIPS == 21111)
+```
+
+Graph poverty data
+```{r}
+two_var_trend(l_pov_data, "bl_pov", "wh_pov", "Black", "White", "Poverty Rate in Louisville",
+              colors = c("orange", "darkblue"), y_upper = 65)
+two_var_trend(l_pov_data, "bl_child_pov", "wh_child_pov", "Black", "White", "Child Poverty Rate in Louisville",
+              colors = c("orange", "darkblue"), y_upper = 65)
+two_var_trend(l_pov_data, "bl_f_pov", "wh_f_pov", "Black", "White", "Female Poverty Rate in Louisville",
+              colors = c("orange", "darkblue"), y_upper = 65)
+two_var_trend(l_pov_data, "bl_m_pov", "wh_m_pov", "Black", "White", "Male Poverty Rate in Louisville",
+              colors = c("orange", "darkblue"), y_upper = 65)
+```
+
+Peer city comparison
+```{r}
+p_pov_data = pov_data %>% 
+  filter(FIPS != 21111)
+
+stl_bl_child_pov = stl_wgt(p_pov_data, "bl_child_pov")
+stl_bl_pov = stl_wgt(p_pov_data, "bl_pov")
+stl_bl_f_pov = stl_wgt(p_pov_data, "bl_f_pov")
+stl_bl_m_pov = stl_wgt(p_pov_data, "bl_m_pov")
+stl_wh_child_pov = stl_wgt(p_pov_data, "wh_child_pov")
+stl_wh_pov = stl_wgt(p_pov_data, "wh_pov")
+stl_wh_f_pov = stl_wgt(p_pov_data, "wh_f_pov")
+stl_wh_m_pov = stl_wgt(p_pov_data, "wh_m_pov")
+
+
+stl_pov = full_join(stl_bl_child_pov, stl_bl_pov, by= c("FIPS", "year", "current"))
+stl_pov = full_join(stl_pov, stl_bl_f_pov, by= c("FIPS", "year", "current"))
+stl_pov = full_join(stl_pov, stl_bl_m_pov, by= c("FIPS", "year", "current"))
+stl_pov = full_join(stl_pov, stl_wh_child_pov, by= c("FIPS", "year", "current"))
+stl_pov = full_join(stl_pov, stl_wh_pov, by= c("FIPS", "year", "current"))
+stl_pov = full_join(stl_pov, stl_wh_f_pov, by= c("FIPS", "year", "current"))
+stl_pov = full_join(stl_pov, stl_wh_m_pov, by= c("FIPS", "year", "current"))
+
+stl_pov = stl_pov %>%
+  select(-current)
+
+stl_pov = stl_pov[c("FIPS", "year", "bl_child_pov", "bl_m_pov", "bl_f_pov", "bl_pov",
+                            "wh_child_pov", "wh_m_pov","wh_f_pov","wh_pov")]#reordering
+
+names(stl_pov) == names(p_pov_data)
+
+peer_pov_data = rbind(p_pov_data, stl_pov)
+
+pm_pov_data = peer_pov_data %>%
+  group_by(year) %>%
+  summarize(
+    p_bl_m_pov = mean(bl_m_pov, na.rm=TRUE),
+    p_bl_child_pov = mean(bl_child_pov, na.rm=TRUE),
+    p_bl_f_pov = mean(bl_f_pov, na.rm=TRUE),
+    p_bl_pov = mean(bl_pov, na.rm=TRUE),
+    p_wh_m_pov = mean(wh_m_pov, na.rm=TRUE),
+    p_wh_child_pov = mean(wh_child_pov, na.rm=TRUE),
+    p_wh_f_pov = mean(wh_f_pov, na.rm=TRUE),
+    p_wh_pov = mean(wh_pov, na.rm=TRUE)
+  )
+
+
+l_and_pm_pov = full_join(l_pov_data, pm_pov_data, by="year")
+
+l_and_pm_pov = l_and_pm_pov %>%
+  mutate(
+    p_pov_gap = p_bl_pov - p_wh_pov,
+    l_pov_gap = bl_pov - wh_pov,
+    p_child_pov_gap = p_bl_child_pov - p_wh_child_pov,
+    l_child_pov_gap = bl_child_pov - wh_child_pov
+  )
+
+two_var_trend(l_and_pm_pov, "bl_pov", "p_bl_pov", "Louisville", "Peer City Mean", "Black Poverty Rate",
+              colors = c("purple", "green"), y_upper = 65)
+
+two_var_trend(l_and_pm_pov, "bl_child_pov", "p_bl_child_pov", "Louisville", "Peer City Mean", "Black Child Poverty Rate",
+              colors = c("purple", "green"), y_upper = 65)
+
+two_var_trend(l_and_pm_pov, "bl_f_pov", "p_bl_f_pov", "Louisville", "Peer City Mean", "Black Female Poverty Rate",
+              colors = c("purple", "green"), y_upper = 65)
+
+two_var_trend(l_and_pm_pov, "bl_m_pov", "p_bl_m_pov", "Louisville", "Peer City Mean", "Black Male Poverty Rate",
+              colors = c("purple", "green"), y_upper = 65)
+
+two_var_trend(l_and_pm_pov, "l_pov_gap", "p_pov_gap", "Louisville", "Peer City Mean", "Black-White Poverty Gap", 
+              y_title = "Percentage Points", colors = c("purple", "green"), y_upper = 65)
+
+two_var_trend(l_and_pm_pov, "l_child_pov_gap", "p_child_pov_gap", "Louisville", "Peer City Mean", "Black-White Child Poverty Gap", 
+              y_title = "Percentage Points", colors = c("purple", "green"), y_upper = 65)
+
+
+
+
+```
+
+SoBL Report Graphs
+```{r echo = FALSE}
+font.add("Museo Sans 300", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300.otf")
+font.add("Museo Sans Italic", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300_Italic.otf")
+
+if(!dir.exists("Reformatted Highlights")){
+  dir.create("Reformatted Highlights")
+}
+setwd("Reformatted Highlights")
+
+showtext.auto()
+
+png("Unemployement.png", 2700, 1800, res = 300)
+two_var_trend(lville_unemployment,
+              "bl_unemployment",
+              "wh_unemployment",
+              "Black",
+              "White", 
+              "Unemployment Rate",
+              colors = c("orange", "darkblue"),
+              y_upper = 30,
+              caption_text = "Source: Greater Louisville Project.
+              Data from the American Community Survey, Tables B23002A and B23002B")
+dev.off()
+
+png("Child Poverty.png", 2700, 1800, res = 300)
+two_var_trend(l_pov_data, 
+              "bl_child_pov", 
+              "wh_child_pov", 
+              "Black", 
+              "White", 
+              "Child Poverty Rate",
+              colors = c("orange", "darkblue"), 
+              y_upper = 65,
+              caption_text = "Source: Greater Louisville Project 
+                Data from the American Community Survey, Tables B23002A and B23002B")
+dev.off()
+
+png("Males out of the Labor Force.png", 2700, 1800, res = 300)
+two_var_trend(lville_unemployment, 
+              "bl_male_out_of_lf_25_54", 
+              "wh_male_out_of_lf_25_54", 
+              "Black", 
+              "White", 
+              "Males Out of the Labor Force, Ages 24-55", 
+              colors = c("orange", "darkblue"),
+              y_upper = 35,
+              caption_text = "Source: Greater Louisville Project 
+                Data from the American Community Survey, Tables B23002A and B23002B")
+dev.off()
+
+png("Male Earnings.png", 2700, 1800, res = 300)
+two_var_trend(lville_income_data, 
+              "bl_m_income", 
+              "wh_m_income", 
+              "Black", 
+              "White", 
+              "Median Male Earnings", 
+              y_title = "Dollars",
+              colors = c("orange", "darkblue"), 
+              y_lower = 0, 
+              y_upper = 60000,
+              caption_text = "Source: Greater Louisville Project 
+                Data from the American Community Survey, Tables B20017A and B200172B")
+dev.off()
+
+png("Female Earnings.png", 2700, 1800, res = 300)
+two_var_trend(lville_income_data,
+              "bl_f_income", 
+              "wh_f_income", 
+              "Black", 
+              "White", 
+              "Median Female Earnings", 
+              y_title = "Dollars",
+              colors = c("orange", "darkblue"), 
+              y_lower = 0, 
+              y_upper = 60000,
+              caption_text = "Source: Greater Louisville Project 
+                Data from the American Community Survey, Tables B20017A and B200172B")
+dev.off()
+
+png("Poverty.png", 2700, 1800, res = 300)
+two_var_trend(l_pov_data, 
+              "bl_pov",
+              "wh_pov", 
+              "Black", 
+              "White", 
+              "Poverty Rate",
+              colors = c("orange", "darkblue"), 
+              y_upper = 65,
+              caption_text = "Source: Greater Louisville Project 
+                Data from the American Community Survey, Tables B17001A and B17001B")
+dev.off()
+```
+
+Histogram
+```{r}
+setwd("Reformatted Highlights")
+
+showtext.auto()
+
+educ_hist = 
+  ggplot(lville_ed_hist, 
+         aes(x=educ_names, y=percent)) +
+  geom_bar(stat="identity")+
+  facet_wrap(~gender)
+
+educ_hist = educ_hist + theme_bw()
+
+educ_hist = educ_hist +
+  labs(title = "Educational Attainment in Lousville by Race and Gender, 2011-2015", 
+       y="Percent", 
+       x = "Highest Level of Education")
+
+educ_hist = educ_hist+
+  theme(axis.text.x=element_text(angle=30, 
+                                 vjust=0.5,
+                                 #hjust =,
+                                 family = "Museo Sans 300", 
+                                 face = "bold",
+                                 size = 36))+
+  theme(plot.title = element_text(family = "Museo Sans 300", 
+                                  hjust = 0.5,
+                                  size = 54,
+                                  margin = margin(t=10,b=10)))+
+  theme(axis.text = element_text(family = "Museo Sans 300",
+                                 size = 36))+
+  theme(axis.title.x = element_text(margin = margin(t=10)))+
+  theme(axis.title = element_text(family = "Museo Sans 300",
+                                  size = 48))+
+  theme(strip.text = element_text(family = "Museo Sans 300",
+                                  size = 48))
+
+
+png(filename = "Educational Attainment Histogram.png",
+    width = 2700, 
+    height = 2700, 
+    res=300)
+educ_hist
+dev.off()
+
+showtext.auto(FALSE)
+```
