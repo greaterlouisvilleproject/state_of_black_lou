@@ -5,7 +5,7 @@ output: html_notebook
 
 ```{r "setup", include=FALSE}
 require("knitr")
-opts_knit$set(root.dir = "C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville")
+opts_knit$set(root.dir = "C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou")
 ```
 
 Load libraries
@@ -20,13 +20,17 @@ library(showtext)
 library(grid)
 library(scales)
 ```
+Add fonts and create directories
+```{r}
+font.add("Museo Sans 300", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300.otf")
+font.add("Museo Sans Italic", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300_Italic.otf")
+
+if(!dir.exists("Reformatted Highlights")){
+  dir.create("Reformatted Highlights")
+}
+```
 
 Helper functions
-  acs_time reads in data from a folder of ACS CSVs
-  stl_wgt weights the values for the two counties that compose St. Louis to create a       single St. Louis observation
-  one_var_trend creates a trendline for a single variable
-  two_var_trend creates a trendline for two variables
-  
 ```{r}
 acs_time<-function(directory,starting.year=2005){
   setwd(directory)
@@ -191,10 +195,13 @@ two_var_trend = function(df, var1, var2, var1_name, var2_name,
 }
 ```
 
+
 UNEMPLOYMENT
 
-Read in unemployment data for black residents
+Read in unemployment data 
 ```{r}
+#BLACK
+
 black_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Unemp Black")
 
 black_unemployment_data = black_unemployment_data %>% 
@@ -247,21 +254,9 @@ lville_black_unemployment = black_unemployment_data %>%
          bl_male_out_of_lf_25_54 = male_out_of_lf_25_54*100,
          bl_female_out_of_lf_25_54 = female_out_of_lf_25_54*100,
          bl_unemployment_16_24 = unemployment_16_24*100)
-```
 
-Graph unemployment data for black residents
-```{r}
-one_var_trend(lville_black_unemployment, "bl_unemployment", "Black Unemployment Rate in Louisville")
-one_var_trend(lville_black_unemployment, "bl_male_unemployment","Black Male Unemployment Rate in Louisville")
-one_var_trend(lville_black_unemployment, "bl_female_unemployment", "Black Female Unemployment Rate in Louisville")
-one_var_trend(lville_black_unemployment, "bl_male_unemployment_16_24", "Louisville Black Male Unemployment Rate, Ages 16-24")
-one_var_trend(lville_black_unemployment, "bl_female_unemployment_16_24", "Louisville Black Female Unemployment Rate, Ages 16-24")
-one_var_trend(lville_black_unemployment, "bl_male_out_of_lf_25_54", "Louisville Black Male Out of Labor Force Rate, Ages 25-54")
-one_var_trend(lville_black_unemployment, "bl_female_out_of_lf_25_54", "Louisville Black Female Out of Labor Force Rate, Ages 25-54")
-```
+#WHITE
 
-Read in unemployment data for white residents
-```{r}
 white_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Unemp White")
 white_unemployment_data = white_unemployment_data %>% 
   mutate(male_unemployed_16_24 = Estimate..Male....16.to.19.years....In.labor.force....Civilian....Unemployed+
@@ -322,8 +317,18 @@ lville_unemployment = lville_unemployment %>%
          female_oolf_ratio = bl_female_out_of_lf_25_54/wh_female_out_of_lf_25_54)
 ```
 
-Graph unemployment data for black and white residents
-```{r}
+Graph unemployment data for black residents
+```{r, include=FALSE}
+#BLACK
+one_var_trend(lville_black_unemployment, "bl_unemployment", "Black Unemployment Rate in Louisville")
+one_var_trend(lville_black_unemployment, "bl_male_unemployment","Black Male Unemployment Rate in Louisville")
+one_var_trend(lville_black_unemployment, "bl_female_unemployment", "Black Female Unemployment Rate in Louisville")
+one_var_trend(lville_black_unemployment, "bl_male_unemployment_16_24", "Louisville Black Male Unemployment Rate, Ages 16-24")
+one_var_trend(lville_black_unemployment, "bl_female_unemployment_16_24", "Louisville Black Female Unemployment Rate, Ages 16-24")
+one_var_trend(lville_black_unemployment, "bl_male_out_of_lf_25_54", "Louisville Black Male Out of Labor Force Rate, Ages 25-54")
+one_var_trend(lville_black_unemployment, "bl_female_out_of_lf_25_54", "Louisville Black Female Out of Labor Force Rate, Ages 25-54")
+
+#BLACK AND WHITE
 two_var_trend(lville_unemployment, "bl_unemployment", "wh_unemployment", "Black", "White", 
               "Unemployment Rate in Louisville by Race, 2005-2015", colors = c("orange", "darkblue"))
 
@@ -410,7 +415,8 @@ peer_unemployment = peer_unemployment %>%
 
 peer_avg = peer_unemployment %>%
   group_by(year) %>%
-  summarise(unemp_ratio_16_24 = mean(peer_unemp_ratio_16_24, na.rm=TRUE))
+  summarise(unemp_ratio_16_24 = mean(peer_unemp_ratio_16_24, na.rm=TRUE))%>%
+  summarise(unempl_ratio = mean(peer_black_unemployment, na.rm = TRUE))
   
 lville_unemp_ratio = lville_unemployment %>%
   select(year, lv_unemp_ratio = unemp_ratio_16_24)
@@ -474,10 +480,12 @@ two_var_trend(peer_and_lville, "lv_wh_unemp", "wh_unemployment_16_24", "Louisvil
               caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Table B23002A")
 ```
 
+
 EDUCATION
 
 Read in data for black educational attainment
 ```{r}
+#BLACK
 black_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Education/Black",
                            starting.year = 2008)
 
@@ -541,23 +549,8 @@ lville_black_educ = black_educ_data %>%
          hs_higher_pct, assoc_higher_pct, bach_higher_pct)
 
 lville_black_educ[,2:22]=lville_black_educ[,2:22]*100
-```
 
-Graph data for black educational attainment
-```{r}
-two_var_trend(lville_black_educ, "m_hs_higher_pct", "f_hs_higher_pct", "Male", "Female", 
-              "Percent Black Residents with High School Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
-
-two_var_trend(lville_black_educ, "m_assoc_higher_pct", "f_assoc_higher_pct", "Male", "Female", 
-              "Percent Black Residents with Associate's Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
-
-two_var_trend(lville_black_educ, "m_bach_higher_pct", "f_bach_higher_pct", "Male", "Female", 
-              "Percent Black Residents with Bachelor's Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
-```
-
-Read in data for white educational attainment
-```{r}
-##White education
+#WHITE
 white_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Education/White",
                            starting.year = 2008)
 
@@ -657,8 +650,17 @@ lville_ed_hist$educ_names = factor(lville_ed_hist$educ_names, levels = c(
   "No HS", "HS", "Some College", "Associate's","Bachelor's","Graduate"))
 ```
 
-continuing graphing education data
+Graphing education data
 ```{r}
+two_var_trend(lville_black_educ, "m_hs_higher_pct", "f_hs_higher_pct", "Male", "Female", 
+              "Percent Black Residents with High School Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_black_educ, "m_assoc_higher_pct", "f_assoc_higher_pct", "Male", "Female", 
+              "Percent Black Residents with Associate's Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
+
+two_var_trend(lville_black_educ, "m_bach_higher_pct", "f_bach_higher_pct", "Male", "Female", 
+              "Percent Black Residents with Bachelor's Degree or Higher \n in Louisville by Gender", y_lower = 0, y_upper = 100)
+
 ##renaming so I can combine data sets and plot black/white gap
 lville_white_educ = lville_white_educ %>%
   select(wh_m_hs_higher_pct = m_hs_higher_pct,
@@ -705,6 +707,7 @@ two_var_trend(lville_educ, "bl_f_hs_higher_pct", "wh_f_hs_higher_pct", "Black", 
               colors = c("orange", "darkblue"), y_lower = 0, y_upper = 100)
 
 ```
+
 
 INCOME
 
@@ -864,6 +867,7 @@ two_var_trend(l_and_pm_inc, "l_ft_f_income_gap", "p_ft_f_income_gap", "Louisivll
               "Difference in Median Income between \n White and Black Females, Full-Time Year-Round", y_title = "Dollars",
               colors = c("purple", "green"), y_lower = 0, y_upper = 60000)
 ```
+
 
 POVERTY
 
@@ -1061,17 +1065,13 @@ two_var_trend(l_and_pm_pov, "l_child_pov_gap", "p_child_pov_gap", "Louisville", 
 
 SoBL Report Graphs
 ```{r echo = FALSE}
-font.add("Museo Sans 300", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300.otf")
-font.add("Museo Sans Italic", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300_Italic.otf")
 
-if(!dir.exists("Reformatted Highlights")){
-  dir.create("Reformatted Highlights")
-}
 setwd("Reformatted Highlights")
 
 showtext.auto()
 
-png("Unemployement.png", 2700, 1800, res = 300)
+#Unemployment rate in Louisville by race
+png("Unemployement Rate.png", 2700, 1800, res = 300)
 two_var_trend(lville_unemployment,
               "bl_unemployment",
               "wh_unemployment",
@@ -1171,7 +1171,9 @@ educ_hist = educ_hist + theme_bw()
 educ_hist = educ_hist +
   labs(title = "Educational Attainment in Lousville by Race and Gender, 2011-2015", 
        y="Percent", 
-       x = "Highest Level of Education")
+       x = "Highest Level of Education",
+       caption = "Source: Greater Louisville Project 
+                Data from the American Community Survey, Tables B15002A and B15002B")
 
 educ_hist = educ_hist+
   theme(axis.text.x=element_text(angle=30, 
@@ -1190,7 +1192,9 @@ educ_hist = educ_hist+
   theme(axis.title = element_text(family = "Museo Sans 300",
                                   size = 48))+
   theme(strip.text = element_text(family = "Museo Sans 300",
-                                  size = 48))
+                                  size = 48))+
+  theme(plot.caption = element_text(family = "Museo Sans 300",
+                                    size = 36))
 
 
 png(filename = "Educational Attainment Histogram.png",
