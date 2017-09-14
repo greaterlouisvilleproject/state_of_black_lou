@@ -554,6 +554,54 @@ two_var_trend(peer_and_lville,
 dev.off()
 ```
 
+Youth unemployment addition
+```{r, message = FALSE}
+if(!dir.exists("Youth Unemployment")){
+  dir.create("Youth Unemployment")
+}
+setwd("Youth Unemployment")
+showtext.auto()
+
+#Youth male unemployment
+png("Male Youth Unemployment.png", 2700, 1800, res = 300, type = "cairo")
+two_var_trend(lville_unemployment, 
+              "bl_male_unemployment_16_24", 
+              "wh_male_unemployment_16_24", 
+              "Black", 
+              "White", 
+              "Male Unemployment Rate in Louisville by Race, Ages 16-24", 
+              colors = c("orange", "darkblue"),
+              y_upper = 60,
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+dev.off()
+
+#Youth female unemployment
+png("Female Youth Unemployment.png", 2700, 1800, res = 300, type = "cairo")
+two_var_trend(lville_unemployment, 
+              "bl_female_unemployment_16_24", 
+              "wh_female_unemployment_16_24", 
+              "Black",
+              "White", 
+              "Female Unemployment Rate in Louisville by Race, Ages 16-24", 
+              colors = c("orange", "darkblue"),
+              y_upper = 60,
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+dev.off()
+
+#Youth unemployment
+png("Youth unemployment.png", 2700, 1800, res = 300, type = "cairo")
+two_var_trend(lville_unemployment,
+              "bl_unemployment_16_24", 
+              "wh_unemployment_16_24",
+              "Black",
+              "White", 
+              "Unemployment Rate in Louisville by Race, Ages 16-24", 
+              y_upper = 60,
+              colors = c("orange", "darkblue"),
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+dev.off()
+```
+
 
 EDUCATION
 
