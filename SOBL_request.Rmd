@@ -78,6 +78,9 @@ acs_time<-function(directory,starting.year=2005){
 
 stl_wgt<-function(df,var){
   df$var <- df[[var]]
+  stl.16<-subset(df, year==2016 & (FIPS==29189|FIPS==29510))
+  stl.wgt.16<-weighted.mean(stl.16$var, c(.758,.242))
+  
   stl.15<-subset(df, year==2015 & (FIPS==29189|FIPS==29510))
   stl.wgt.15<-weighted.mean(stl.15$var, c(.761,.239))
   
@@ -111,11 +114,11 @@ stl_wgt<-function(df,var){
   stl.05<-subset(df, year==2005 & (FIPS==29189|FIPS==29510))
   stl.wgt.05<-weighted.mean(stl.05$var, c(.747,.253))
   
-  stl<-c(stl.wgt.15,stl.wgt.14,stl.wgt.13,stl.wgt.12,stl.wgt.11,stl.wgt.10,stl.wgt.09,
+  stl<-c(stl.wgt.16,stl.wgt.15,stl.wgt.14,stl.wgt.13,stl.wgt.12,stl.wgt.11,stl.wgt.10,stl.wgt.09,
          stl.wgt.08,stl.wgt.07,stl.wgt.06,stl.wgt.05)
-  year<-2015:2005
-  FIPS<-rep(0,11)
-  current<-rep(1,11)
+  year<-2016:2005
+  FIPS<-rep(0,12)
+  current<-rep(1,12)
   stl.df<-cbind(FIPS,year,stl,current)
   colnames(stl.df)<-c("FIPS","year",var,"current")
   stl.df<-as.data.frame(stl.df)
@@ -138,7 +141,7 @@ one_var_trend = function(df,
     geom_point(size = 2, colour = color)+
     geom_smooth(colour = color)
   p<-p+theme_bw()
-  p<-p+scale_x_continuous(breaks=seq(2005, 2015, 2))
+  p<-p+scale_x_continuous(breaks=seq(2006, 2016, 2))
   p<-p+theme(text = element_text(family = "Museo Sans 300"))
     p<-p+labs(title=title,
             x="Year",
@@ -183,7 +186,7 @@ two_var_trend = function(df, var1, var2, var1_name, var2_name,
     scale_linetype_manual(values = c(1,5)) +
     scale_shape_manual(values=c(19,15))
   p<-p+theme_bw()
-  p<-p+scale_x_continuous(breaks=seq(2005, 2015, 2))
+  p<-p+scale_x_continuous(breaks=seq(2006, 2016, 2))
   p<-p+theme(legend.title=element_blank())
   p<-p+scale_shape(labels=c(var1_name, var2_name))
   p<-p+scale_linetype_manual(values=c(1,5), labels=c(var1_name, var2_name))
@@ -225,7 +228,7 @@ Read in unemployment data
 ```{r, message = FALSE}
 #BLACK
 
-black_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Unemp Black")
+black_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Unemp Black")
 
 black_unemployment_data = black_unemployment_data %>% 
   mutate(male_unemployed_16_24 = 
@@ -304,7 +307,7 @@ lville_black_unemployment =
 
 #WHITE
 
-white_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Unemp White")
+white_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Unemp White")
 
 white_unemployment_data = 
   white_unemployment_data %>% 
@@ -498,16 +501,17 @@ peer_white_unemployment = white_unemployment_data %>%
   mutate(wh_unemployment = unemployment*100)
 
 peer_unemployment = full_join(peer_black_unemployment, peer_white_unemployment, by = c("year", "FIPS"))
+
 peer_unemployment = peer_unemployment %>%
   mutate(peer_unemp_ratio = bl_unemployment/wh_unemployment)%>%
   select(FIPS, year, bl_unemployment, peer_unemp_ratio)
   
-stl_data = stl_wgt(peer_unemployment, "peer_unemp_ratio")
-stl_data = cbind(stl_data$peer_unemp_ratio, stl_wgt(peer_unemployment, "bl_unemployment"))%>%
-  mutate(peer_unemp_ratio = stl_data$peer_unemp_ratio)%>%
-  select(FIPS, year, peer_unemp_ratio, bl_unemployment)
+stl_bl_unemp = stl_wgt(peer_unemployment, "bl_unemployment")
+stl_unemp_ratio = stl_wgt(peer_unemployment, "peer_unemp_ratio")
+stl_unemp = full_join(stl_bl_unemp, stl_unemp_ratio, by= c("FIPS", "year", "current"))%>%
+  select(FIPS, year, bl_unemployment, peer_unemp_ratio)
 
-peer_unemployment = rbind(peer_unemployment, stl_data)
+peer_unemployment = rbind(peer_unemployment, stl_unemp)
 peer_unemployment = peer_unemployment %>%
   filter(FIPS != 29189 & FIPS != 29510)
 
@@ -533,7 +537,7 @@ two_var_trend(peer_and_lville,
               Data from American Community Survey Tables B23002A and B23002B")
 dev.off()
 
-#Unemployment black/-hite ratio in Louisville and peer cities
+#Unemployment black/white ratio in Louisville and peer cities
 png("Unemployment Ratio, Peer Cities.png", 2700, 1800, res = 300, type="cairo")
 two_var_trend(peer_and_lville, 
               "lv_unemp_ratio", 
@@ -556,7 +560,7 @@ EDUCATION
 Read in data for black educational attainment
 ```{r, message=FALSE}
 #BLACK
-black_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Education/Black",
+black_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Education/Black",
                            starting.year = 2008)
 
 black_educ_data = black_educ_data %>%
@@ -660,7 +664,7 @@ lville_black_educ = black_educ_data %>%
 lville_black_educ[,2:22]=lville_black_educ[,2:22]*100
 
 #WHITE
-white_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Education/White",
+white_educ_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Education/White",
                            starting.year = 2008)
 
 white_educ_data = white_educ_data %>%
@@ -776,7 +780,7 @@ educ_hist =
 educ_hist = educ_hist + theme_bw()
 
 educ_hist = educ_hist +
-  labs(title = "Educational Attainment in Lousville by Race and Gender, 2011-2015", 
+  labs(title = "Educational Attainment in Lousville by Race and Gender, 2011-2016", 
        y="Percent", 
        x = "Highest Level of Education",
        caption = "Source: Greater Louisville Project 
@@ -816,7 +820,7 @@ INCOME
 
 Read in black and white income data
 ```{r, message = FALSE}
-black_income_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Income/Black")
+black_income_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Income/Black")
 
 black_income_data = black_income_data %>% 
   select(bl_m_income = Estimate..Male......Total,
@@ -829,7 +833,7 @@ black_income_data = black_income_data %>%
          bl_f_income = as.numeric(as.character(bl_f_income)),
          bl_ft_f_income = as.numeric(as.character(bl_ft_f_income)))
 
-white_income_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Income/White")
+white_income_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Income/White")
 
 white_income_data = white_income_data %>% 
   select(wh_m_income = Estimate..Male......Total,
@@ -1127,7 +1131,7 @@ POVERTY
 Read in poverty data
 ```{r}
 #BLACK
-black_pov_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Poverty/Black")
+black_pov_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Poverty/Black")
 
 black_pov_data = black_pov_data %>%
   mutate(num_m_child_poor = Estimate..Income.in.the.past.12.months.below.poverty.level....Male....Under.5.years+
@@ -1173,7 +1177,7 @@ black_pov_data = black_pov_data %>%
   select(FIPS, year, bl_child_pov = child_pov, bl_m_pov = m_pov, bl_f_pov = f_pov, bl_pov = pov)
 
 #WHITE
-white_pov_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/State of Black Lville/input data/Poverty/White")
+white_pov_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Poverty/White")
 
 white_pov_data = white_pov_data %>%
   mutate(num_m_child_poor = Estimate..Income.in.the.past.12.months.below.poverty.level....Male....Under.5.years+
