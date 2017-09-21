@@ -521,6 +521,7 @@ peer_avg = peer_unemployment %>%
   
 lville_unemp = lville_unemployment %>%
   select(year, lv_unemp_ratio = unemp_ratio, lv_bl_unemployment = bl_unemployment)
+
 peer_and_lville = full_join(peer_avg, lville_unemp, by = "year")
 
 #Black unemployment in Louisville and peer cities
@@ -599,6 +600,111 @@ two_var_trend(lville_unemployment,
               y_upper = 60,
               colors = c("orange", "darkblue"),
               caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+dev.off()
+```
+
+Youth unempliyment peer city comparison
+```{r}
+if(!dir.exists("Youth Unemployment")){
+  dir.create("Youth Unemployment")
+}
+setwd("Youth Unemployment")
+showtext.auto()
+
+peer_black_unemployment = black_unemployment_data %>%
+  filter(FIPS != 21111 & current == 1)%>%
+  select(FIPS, year, unemployment, male_unemployment, female_unemployment, male_unemployment_16_24, 
+         female_unemployment_16_24, male_out_of_lf_25_54,female_out_of_lf_25_54, unemployment_16_24)%>%
+  mutate(bl_unemployment = unemployment*100,
+         bl_male_unemployment = male_unemployment*100,
+         bl_female_unemployment = female_unemployment*100,
+         bl_male_unemployment_16_24 = male_unemployment_16_24*100,
+         bl_female_unemployment_16_24 = female_unemployment_16_24*100,
+         bl_male_out_of_lf_25_54 = male_out_of_lf_25_54*100,
+         bl_female_out_of_lf_25_54 = female_out_of_lf_25_54*100,
+         bl_unemployment_16_24 = unemployment_16_24*100)
+
+peer_white_unemployment = white_unemployment_data %>%
+  filter(FIPS != 21111  & current ==1)%>%
+  select(FIPS, year, unemployment, male_unemployment, female_unemployment, male_unemployment_16_24, 
+         female_unemployment_16_24, male_out_of_lf_25_54,female_out_of_lf_25_54, unemployment_16_24)%>%
+  mutate(wh_unemployment = unemployment*100,
+         wh_male_unemployment = male_unemployment*100,
+         wh_female_unemployment = female_unemployment*100,
+         wh_male_unemployment_16_24 = male_unemployment_16_24*100,
+         wh_female_unemployment_16_24 = female_unemployment_16_24*100,
+         wh_male_out_of_lf_25_54 = male_out_of_lf_25_54*100,
+         wh_female_out_of_lf_25_54 = female_out_of_lf_25_54*100,
+         wh_unemployment_16_24 = unemployment_16_24*100)
+
+peer_unemployment = full_join(peer_black_unemployment, peer_white_unemployment, by = c("year", "FIPS"))
+peer_unemployment = peer_unemployment %>%
+  mutate(peer_unemp_ratio = bl_unemployment/wh_unemployment,
+         peer_unemp_ratio_16_24 = bl_unemployment_16_24/wh_unemployment_16_24)%>%
+  select(FIPS, year, peer_unemp_ratio_16_24)
+  
+stl_data = stl_wgt(peer_unemployment, "peer_unemp_ratio_16_24")
+stl_data = stl_data %>%
+  select(FIPS, year, peer_unemp_ratio_16_24)
+
+peer_unemployment = rbind(peer_unemployment, stl_data)
+peer_unemployment = peer_unemployment %>%
+  filter(FIPS != 29189 & FIPS != 29510)
+
+peer_avg = peer_unemployment %>%
+  group_by(year) %>%
+  summarise(unemp_ratio_16_24 = mean(peer_unemp_ratio_16_24, na.rm=TRUE))
+  
+lville_unemp_ratio = lville_unemployment %>%
+  select(year, lv_unemp_ratio = unemp_ratio_16_24)
+peer_and_lville = full_join(peer_avg, lville_unemp_ratio, by = "year")
+
+png("Youth unemployment, peer cities.png", 2700, 1800, res = 300, type = "cairo")
+two_var_trend(peer_and_lville,
+              "lv_unemp_ratio", 
+              "unemp_ratio_16_24",
+              "Louisville", 
+              "Peer City Mean", 
+              "Black/White Unemployment Ratio in Louisville and Peer Cities \n Ages 16-24",
+              y_title = "Ratio", 
+              colors = c("purple", "green"), 
+              y_lower = 0, 
+              y_upper = 4,
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Tables B23002A and B23002B")
+dev.off()
+
+
+#black unemployment peer cities
+peer_unemployment = full_join(peer_black_unemployment, peer_white_unemployment, by = c("year", "FIPS"))
+peer_unemployment = peer_unemployment %>%
+  select(FIPS, year, bl_unemployment_16_24)
+
+stl_data = stl_wgt(peer_unemployment, "bl_unemployment_16_24")
+stl_data = stl_data %>%
+  select(FIPS, year, bl_unemployment_16_24)
+
+peer_unemployment = rbind(peer_unemployment, stl_data)
+peer_unemployment = peer_unemployment %>%
+  filter(FIPS != 29189 & FIPS != 29510)
+
+peer_avg = peer_unemployment %>%
+  group_by(year) %>%
+  summarise(bl_unemployment_16_24 = mean(bl_unemployment_16_24, na.rm=TRUE))
+
+lville_unemp = lville_unemployment %>%
+  select(year, lv_bl_unemp = bl_unemployment_16_24)
+peer_and_lville = full_join(peer_avg, lville_unemp, by = "year")
+
+png("Black youth unemployment, peer cities.png", 2700, 1800, res = 300, type = "cairo")
+two_var_trend(peer_and_lville, 
+              "lv_bl_unemp", 
+              "bl_unemployment_16_24", 
+              "Louisville",
+              "Peer City Mean", 
+              "Black Unemployment in Louisville and Peer Cities, Ages 16-24", 
+              colors = c("purple", "green"),
+              y_upper = 60,
+              caption_text = "Source: Greater Louisville Project \n Data from American Community Survey Table B23002B")
 dev.off()
 ```
 
@@ -828,7 +934,7 @@ educ_hist =
 educ_hist = educ_hist + theme_bw()
 
 educ_hist = educ_hist +
-  labs(title = "Educational Attainment in Lousville by Race and Gender, 2011-2016", 
+  labs(title = "Highest Level of Educational Attainment in Lousville\nby Race and Gender, 2011-2016", 
        y="Percent", 
        x = "Highest Level of Education",
        caption = "Source: Greater Louisville Project 
@@ -843,7 +949,8 @@ educ_hist = educ_hist+
   theme(plot.title = element_text(family = "Museo Sans 300", 
                                   hjust = 0.5,
                                   size = 54,
-                                  margin = margin(t=10,b=10)))+
+                                  margin = margin(t=10,b=10),
+                                  lineheight = .3))+
   theme(axis.text = element_text(family = "Museo Sans 300",
                                  size = 36))+
   theme(axis.title.x = element_text(margin = margin(t=10)))+
