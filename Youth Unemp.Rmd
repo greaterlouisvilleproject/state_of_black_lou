@@ -1,0 +1,624 @@
+---
+title: "Youth Unemployment"
+output: html_notebook
+---
+
+
+-----SETUP-----
+
+```{r "setup", include=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou")
+```
+
+Load libraries
+```{r, message = FALSE}
+#State of Black Louisville Analysis
+
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(ggthemes)
+library(showtext)
+library(grid)
+library(scales)
+library(magrittr)
+library(rlang)
+library(ggthemes)
+library(plyr)
+library(wesanderson)
+```
+
+Add fonts and create directories
+```{r, message = FALSE}
+font.add("Museo Sans 300", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300.otf")
+font.add("Museo Sans Italic", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300_Italic.otf")
+
+if(!dir.exists("Youth Unemployment")){
+  dir.create("Youth Uneployment")
+}
+```
+
+Helper functions
+```{r, message = FALSE}
+acs_time<-function(directory,starting.year=2005){
+  setwd(directory)
+  file_names<-list.files()
+  n<-length(file_names)
+  y<-starting.year
+  for (i in 1:n){
+    data<-read.csv(file_names[i],header=TRUE, skip=1)
+    names(data)[names(data) == 'Id2'] <- 'FIPS'
+    all.peers <-subset(data, data$FIPS == 1073 |data$FIPS == 37119
+                       |data$FIPS == 39061 |data$FIPS == 39049
+                       |data$FIPS == 26081 |data$FIPS == 37081
+                       |data$FIPS == 45045 |data$FIPS == 18097
+                       |data$FIPS == 29095 |data$FIPS == 47093
+                       |data$FIPS == 21111 |data$FIPS == 47157
+                       |data$FIPS == 47037 |data$FIPS == 40109
+                       |data$FIPS == 31055 |data$FIPS == 29189
+                       |data$FIPS == 29510
+                       |data$FIPS == 40143 |data$FIPS == 39113
+                       |data$FIPS == 12031 |data$FIPS == 37183
+                       |data$FIPS == 37183 |data$FIPS == 51760)
+    
+    all.peers$year<-y
+    all.peers$baseline<-1
+    all.peers$current<-1
+    all.peers$baseline[all.peers$FIPS==26081|all.peers$FIPS==29189
+                       |all.peers$FIPS==29510|all.peers$FIPS==40109
+                       |all.peers$FIPS==40143|all.peers$FIPS==45045
+                       |all.peers$FIPS==47093]<-0
+    all.peers$current[all.peers$FIPS== 12031|all.peers$FIPS==37183|
+                        all.peers$FIPS==39113|all.peers$FIPS==51760]<-0
+    y<-y+1
+    
+    if(i==1){
+      df<-all.peers 
+    }
+    else{
+      names(all.peers)<-names(df)
+      df<-rbind(df, all.peers)
+    }
+  }
+  
+  df <- df[, c((ncol(df)-2):ncol(df), 1:(ncol(df)-3))]
+    
+  df
+}
+
+stl_wgt<-function(df, total_var){
+  
+stl_df = 
+  df%>%
+  filter(FIPS==29189 | FIPS==29510)%>%
+  select(-c(2:6))%>%
+  group_by(year)%>%
+  summarise_all(funs(weighted.mean(!!sym(total_var))))%>%
+  ungroup()
+
+stl_df$FIPS = 99999
+stl_df$baseline = 0
+stl_df$current = 1
+stl_df$Geography = "St. Louis"
+
+df%<>%
+  filter(!(FIPS == 29189 | FIPS == 29510))%>%
+  bind_rows(stl_df)%>%
+  select(-!!sym(total_var))
+
+df
+  
+}
+
+mutator1 <- function(data){
+  data%<>%
+  mutate(
+        m_unemp = 
+           Estimate..Male....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....20.to.24.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....25.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....55.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Male....70.years.and.over....In.labor.force....Unemployed,
+         
+         m_lf = 
+           Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Male....20.to.24.years....In.labor.force.+           
+           Estimate..Male....25.to.54.years....In.labor.force.+
+           Estimate..Male....55.to.64.years....In.labor.force.+
+           Estimate..Male....65.to.69.years....In.labor.force.+
+           Estimate..Male....70.years.and.over....In.labor.force.,
+         
+         f_unemp = 
+           Estimate..Female....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....20.to.24.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....25.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....55.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Female....70.years.and.over....In.labor.force....Unemployed,
+         
+         f_lf = 
+           Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Female....20.to.24.years....In.labor.force.+
+           Estimate..Female....25.to.54.years....In.labor.force.+
+           Estimate..Female....55.to.64.years....In.labor.force.+
+           Estimate..Female....65.to.69.years....In.labor.force.+
+           Estimate..Female....70.years.and.over....In.labor.force.,
+         
+         m_16_24 = 
+           Estimate..Male....16.to.19.years. + 
+           Estimate..Male....20.to.24.years.,
+         
+         m_16_24_lf = 
+           Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Male....20.to.24.years....In.labor.force.,
+         
+         m_16_24_oolf = m_16_24 - m_16_24_lf,
+         
+         m_16_24_unemp =            
+           Estimate..Male....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....20.to.24.years....In.labor.force....Civilian....Unemployed,
+         
+         m_16_24_emp = m_16_24_lf - m_16_24_unemp,
+         
+         f_16_24 = 
+           Estimate..Female....16.to.19.years. + 
+           Estimate..Female....20.to.24.years.,
+         
+         f_16_24_lf = 
+           Estimate..Female....16.to.19.years....In.labor.force.+
+           Estimate..Female....20.to.24.years....In.labor.force.,
+         
+         f_16_24_oolf = f_16_24 - f_16_24_lf,
+         
+         f_16_24_unemp =            
+           Estimate..Female....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....20.to.24.years....In.labor.force....Civilian....Unemployed,
+         
+         f_16_24_emp = f_16_24_lf - f_16_24_unemp,
+        
+         YOUNG_lf = m_16_24_lf + f_16_24_lf,
+        
+         YOUNG_oolf = m_16_24_oolf + f_16_24_oolf,
+        
+         YOUNG_unemp = m_16_24_unemp + f_16_24_unemp,
+        
+         YOUNG_emp = m_16_24_emp + f_16_24_emp,
+         
+         m_unemp_per = m_unemp/m_lf * 100,
+        
+         f_unemp_per = f_unemp/f_lf * 100,
+        
+         unemp_per = (m_unemp+f_unemp)/(m_lf + f_lf) * 100,
+        
+         m_16_24_unemp_per = m_16_24_unemp / m_16_24_lf * 100,
+        
+         f_16_24_unemp_per = f_16_24_unemp / f_16_24_lf * 100,
+        
+         YOUNG_unemp_per = (f_16_24_unemp + m_16_24_unemp) / (f_16_24_lf + m_16_24_lf) * 100,
+        
+         total = Estimate..Total.
+         #total_16_24 = m_16_24 + f_16_24
+  )
+  data
+}
+
+mutator2 <- function(data){
+  data%<>%
+  mutate(m_unemp = 
+           Estimate..Male....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....20.and.21.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....22.to.24.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....25.to.29.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....30.to.34.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....35.to.44.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....45.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....55.to.59.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....60.and.61.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....62.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Male....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Male....70.to.74.years....In.labor.force....Unemployed+
+           Estimate..Male....75.years.and.over....In.labor.force....Unemployed,
+
+         m_lf = 
+           Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Male....20.and.21.years....In.labor.force.+           
+           Estimate..Male....22.to.24.years....In.labor.force.+
+           Estimate..Male....25.to.29.years....In.labor.force.+
+           Estimate..Male....30.to.34.years....In.labor.force.+
+           Estimate..Male....35.to.44.years....In.labor.force.+
+           Estimate..Male....45.to.54.years....In.labor.force.+
+           Estimate..Male....55.to.59.years....In.labor.force.+
+           Estimate..Male....60.and.61.years....In.labor.force.+           
+           Estimate..Male....62.to.64.years....In.labor.force.+
+           Estimate..Male....65.to.69.years....In.labor.force.+
+           Estimate..Male....70.to.74.years....In.labor.force.+
+           Estimate..Male....55.to.59.years....In.labor.force.+
+           Estimate..Male....75.years.and.over....In.labor.force.,
+         
+         f_unemp = 
+           Estimate..Female....16.to.19.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....20.and.21.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....22.to.24.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....25.to.29.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....30.to.34.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....35.to.44.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....45.to.54.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....55.to.59.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....60.and.61.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....62.to.64.years....In.labor.force....Civilian....Unemployed+
+           Estimate..Female....65.to.69.years....In.labor.force....Unemployed+
+           Estimate..Female....70.to.74.years....In.labor.force....Unemployed+
+           Estimate..Female....75.years.and.over....In.labor.force....Unemployed,
+
+         f_lf = 
+           Estimate..Female....16.to.19.years....In.labor.force.+
+           Estimate..Female....20.and.21.years....In.labor.force.+           
+           Estimate..Female....22.to.24.years....In.labor.force.+
+           Estimate..Female....25.to.29.years....In.labor.force.+
+           Estimate..Female....30.to.34.years....In.labor.force.+
+           Estimate..Female....35.to.44.years....In.labor.force.+
+           Estimate..Female....45.to.54.years....In.labor.force.+
+           Estimate..Female....55.to.59.years....In.labor.force.+
+           Estimate..Female....60.and.61.years....In.labor.force.+           
+           Estimate..Female....62.to.64.years....In.labor.force.+
+           Estimate..Female....65.to.69.years....In.labor.force.+
+           Estimate..Female....70.to.74.years....In.labor.force.+
+           Estimate..Female....55.to.59.years....In.labor.force.+
+           Estimate..Female....75.years.and.over....In.labor.force.,
+         
+         m_16_24 = 
+           Estimate..Male....16.to.19.years. + 
+           Estimate..Male....20.and.21.years.+
+           Estimate..Male....22.to.24.years.,
+
+         
+         m_16_24_lf = 
+           Estimate..Male....16.to.19.years....In.labor.force.+
+           Estimate..Male....20.and.21.years....In.labor.force.+
+           Estimate..Male....22.to.24.years....In.labor.force.,
+         
+         m_16_24_oolf = m_16_24 - m_16_24_lf,
+         
+         m_16_24_unemp =            
+           Estimate..Male....16.to.19.years....In.labor.force....Civilian....Unemployed +
+           Estimate..Male....20.and.21.years....In.labor.force....Civilian....Unemployed +
+           Estimate..Male....22.to.24.years....In.labor.force....Civilian....Unemployed,
+         
+         m_16_24_emp = m_16_24_lf - m_16_24_unemp,
+         
+         f_16_24 = 
+           Estimate..Female....16.to.19.years. + 
+           Estimate..Female....20.and.21.years. + 
+           Estimate..Female....22.to.24.years.,
+         
+         f_16_24_lf = 
+           Estimate..Female....16.to.19.years....In.labor.force. +
+           Estimate..Female....20.and.21.years....In.labor.force. +
+           Estimate..Female....22.to.24.years....In.labor.force.,
+         
+         f_16_24_oolf = f_16_24 - f_16_24_lf,
+         
+         f_16_24_unemp =            
+           Estimate..Female....16.to.19.years....In.labor.force....Civilian....Unemployed +
+           Estimate..Female....20.and.21.years....In.labor.force....Civilian....Unemployed +
+           Estimate..Female....22.to.24.years....In.labor.force....Civilian....Unemployed,
+         
+         f_16_24_emp = f_16_24_lf - f_16_24_unemp,
+         
+         YOUNG_lf = m_16_24_lf + f_16_24_lf,
+         YOUNG_oolf = m_16_24_oolf + f_16_24_oolf,
+         YOUNG_unemp = m_16_24_unemp + f_16_24_unemp,
+         YOUNG_emp = m_16_24_emp + f_16_24_emp,
+         
+         m_unemp_per = m_unemp/m_lf * 100,
+         f_unemp_per = f_unemp/f_lf * 100,
+         unemp_per = (m_unemp+f_unemp)/(m_lf + f_lf) * 100,
+         
+         m_16_24_unemp_per = m_16_24_unemp / m_16_24_lf * 100,
+         f_16_24_unemp_per = f_16_24_unemp / f_16_24_lf * 100,
+         YOUNG_unemp_per = (f_16_24_unemp + m_16_24_unemp) / (f_16_24_lf + m_16_24_lf) * 100,
+         
+         total = Estimate..Total.
+         #total_16_24 = m_16_24 + f_16_24
+  )
+  
+  data
+}
+```
+
+Graphing functions
+```{r, message = FALSE}
+one_var_trend = function(df, 
+                         var, 
+                         title, 
+                         y_title = "Percent",
+                         y_lower = 0,
+                         y_upper = NA,
+                         color = "red",
+                         caption_text = ""){
+  df$var<-df[[var]]
+  p<-ggplot(data=df,aes(x=year,y=var))+
+    geom_point(size = 2, colour = color)+
+    geom_smooth(colour = color)
+  p<-p+theme_bw()
+  p<-p+scale_x_continuous(breaks=seq(2006, 2016, 2))
+  p<-p+theme(text = element_text(family = "Museo Sans 300"))
+    p<-p+labs(title=title,
+            x="Year",
+            y=y_title,
+            caption = caption_text)
+  p<-p+theme(legend.title=element_blank())
+  p<-p+theme(axis.title=element_text(family = "Museo Sans 300", 
+                                     size = 36))
+
+  p<-p+theme(axis.text=element_text(size=36, family = "Museo Sans 300"))
+  p<-p+theme(axis.ticks.y=element_blank())
+  p<-p+theme(plot.title=element_text(color="black",
+                                     size=54,
+                                     face="bold",
+                                     hjust=.5,
+                                     margin=margin(b=10,unit="pt"),
+                                     family = "Museo Sans 300"))
+  p<-p+theme(legend.text=element_text(size=36, family = "Museo Sans 300"))
+  p<-p+theme(plot.caption = element_text(size = 24,
+                                         lineheight = .3))
+  p<-p + ylim(y_lower, y_upper)
+  p
+}
+
+two_var_trend = function(df, var1, var2, var1_name, var2_name, 
+                         title,
+                         y_title="Percent", 
+                         colors = c("red", "skyblue3"),
+                         y_lower = 0, 
+                         y_upper = 30, 
+                         caption_text = "",
+                         y_lower_se = -50){
+  df$var1<-df[[var1]]
+  df$var2<-df[[var2]]
+  data_keep = df %>%
+    select(year, var1, var2)
+  data_long<-melt(data_keep, id="year")
+  p<-ggplot(data=data_long,
+            aes(x=year,y=value, shape=variable, linetype=variable, colour=variable))+
+    geom_point(size = 2)+
+    geom_smooth(show.legend = FALSE)+
+    scale_linetype_manual(values = c(1,5)) +
+    scale_shape_manual(values=c(19,15))
+  p<-p+theme_bw()
+  p<-p+scale_x_continuous(breaks=seq(2006, 2016, 2))
+  p<-p+theme(legend.title=element_blank())
+  p<-p+scale_shape(labels=c(var1_name, var2_name))
+  p<-p+scale_linetype_manual(values=c(1,5), labels=c(var1_name, var2_name))
+  p<-p+scale_colour_discrete(labels=c(var1_name, var2_name))
+  p<-p+scale_colour_manual(values = colors, labels = c(var1_name, var2_name))
+  p<-p+theme(axis.title=element_text(family = "Museo Sans 300"))
+  p<-p+labs(title=title,
+            x="Year",
+            y=y_title, 
+            caption = caption_text)
+  
+  p<-p+theme(axis.text=element_text(size=36, family = "Museo Sans 300"))
+  p<-p+theme(axis.title = element_text(size=36))
+  p<-p+theme(axis.ticks.y=element_blank())
+  p<-p+theme(plot.title=element_text(color="black",
+                                     size=54,
+                                     face="bold",
+                                     hjust=.5,
+                                     margin=margin(b=10,unit="pt"), 
+                                     family = "Museo Sans 300",
+                                     lineheight = .3))
+  p<-p+theme(legend.text=element_text(size=36, family = "Museo Sans 300"))+
+       guides(linetype=FALSE)
+  p<-p+theme(plot.caption = element_text(family = "Museo Sans 300",
+                                         size = 24,
+                                         lineheight = .3))
+  p<-p+theme(plot.margin = unit(c(.5,.25,.1,.5), "cm"))
+  p = p + ylim(y_lower_se, y_upper)
+  p <- p + coord_cartesian(ylim = c(y_lower, y_upper))
+  p <- p + scale_y_continuous(label=comma)
+  p
+}
+
+```
+
+
+-----READ IN DATA-----
+
+Read in unemployment data 
+```{r, message = FALSE}
+
+#BLACK
+
+black_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Unemp Black")
+
+b_unemp = mutator1(black_unemployment_data)
+
+b_unemp %<>%
+  select(-c(7:164))%>%
+  rename_at(-c(1:6),function(x,y) {paste0(y,x)}, "b_")
+
+b_unemp = stl_wgt(b_unemp, 'b_total')
+
+#WHITE
+
+white_unemployment_data = acs_time("C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Unemp White")
+
+w_unemp = mutator1(white_unemployment_data)
+
+w_unemp %<>%
+  select(-c(7:164))%>%
+  rename_at(-c(1:6),function(x,y) {paste0(y,x)}, "w_")
+
+w_unemp = stl_wgt(w_unemp, 'w_total')
+
+#ALL
+
+all_unemployment_data = acs_time('C:/Users/Harrison Kirby/Desktop/GLP/state_of_black_lou/input data/Unemp All')
+
+all_unemp = mutator2(all_unemployment_data)
+
+all_unemp %<>%
+  select(-c(7:352))%>%
+  rename_at(-c(1:6),function(x,y) {paste0(y,x)}, "all_")
+
+all_unemp = stl_wgt(all_unemp, "all_total")
+
+#join to full data set
+
+unemployment = full_join(w_unemp, b_unemp, by = c("FIPS","year"))
+unemployment = inner_join(unemployment, all_unemp, by = c("FIPS","year"))
+unemployment[,c("baseline.x","baseline.y","current.x","current.y",
+                "Id.x","Id.y","Geography.x","Geography.y")] <- NULL
+
+unemployment%<>%select("year", "FIPS", "baseline", "current", "Id", "Geography", everything())
+names(unemployment) <- gsub(x = names(unemployment), pattern="YOUNG", replacement="16_24")
+
+rm(b_unemp, black_unemployment_data, all_unemp, all_unemployment_data, w_unemp, white_unemployment_data)
+```
+
+subset
+```{r}
+lou_unemployment =
+  unemployment %>%
+  filter(FIPS == 21111)
+
+peer_unemployment = unemployment %>%
+  filter(FIPS != 21111 & current == 1)
+
+peer_avg = 
+  peer_unemployment %>%
+  group_by(year) %>%
+  summarise_at(-c(1:6), mean, na.rm = TRUE)
+
+rm(peer_unemployment)
+```
+
+-----GRAPHING-----
+
+Graphing fxn
+```{r}
+
+bar_chart <- function(data, 
+                      title,
+                      subtitle,
+                      y_title,
+                      race = "all", 
+                      sex = "", 
+                      age = "", 
+                      y_axis = "", 
+                      type = "stack", 
+                      lbls = c('Out of Labor Force', 'Unemployed', 'Employed')
+                      )
+{
+
+#constructor
+prefix = ""
+prefix = paste0(prefix, race, "_")
+if(sex != "") prefix = paste0(prefix, sex, "_")
+if(age != "") prefix = paste0(prefix, age, "_")
+
+#suffix = ""
+#if(y_axis != "") suffix = paste0("_", y_axis)
+
+lvls = c(paste0(prefix, "oolf"),
+         paste0(prefix, "unemp"),
+         paste0(prefix, "emp")
+        )
+  
+#reshape data and label variables
+data_long =
+  data %>%
+  select(year, lvls[1], lvls[2], lvls[3])%>%
+  melt(id = "year")
+
+data_long %<>%
+  group_by(year) %>% 
+  mutate(per = value/sum(value) * 1000)
+
+data_long$per = round(data_long$per, 0)
+
+data_long$variable %<>% factor(levels = lvls,
+                               labels = lbls)
+  
+
+#PLOT
+
+g <- ggplot(data_long, 
+            aes(x = year, y = value, fill = variable)) + 
+  
+  theme_tufte()+
+  theme(text = element_text(family = 'Museo Sans 300', size = 24))+
+  scale_fill_manual(values = brewer.pal(3,"Spectral"))+
+  
+  geom_bar(stat = "identity", position = type)+
+  geom_text(aes(y = value, label = paste0(per, "%")), 
+            position = position_stack(vjust = 0.5), 
+            size = 6, 
+            color = "gray25") +
+  
+  labs(title = title, 
+       subtitle = subtitle, 
+       y = y_title) + 
+  theme(legend.title  = element_blank(),
+        axis.title.x  = element_blank(),
+        axis.ticks    = element_blank(),
+        plot.title    = element_text(hjust = .5),
+        plot.subtitle = element_text(hjust = .5),
+        axis.text     = element_text(color = "black"))+
+  
+  scale_x_continuous(breaks=seq(2005, 2016, 1))+
+  scale_y_continuous(label = comma)
+  
+  if(type == 'fill'){
+  g <- g + scale_y_continuous(labels = scales::percent)
+  }
+  
+g
+}
+```
+
+Graphs
+```{r}
+font.add("Museo Sans 300", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300.otf")
+font.add("Museo Sans Italic", "C:/Users/Harrison Kirby/Desktop/GLP/MuseoSans_300_Italic.otf")
+
+showtext.auto()
+
+png("Employment, 16-24.png", 1500, 1000, res = 300, type = "cairo")
+g<-bar_chart(lou_unemployment,
+             title = "Employment Status in Louisville",
+             subtitle = 'Ages 16-24',
+             race = "all",
+             sex = "",
+             age = "16_24",
+             type = 'stack',
+             y_title = "Total residents"
+)
+g
+dev.off()
+
+```
+
+Other
+```{r}
+g<-bar_chart(lou_unemployment, 
+             type = "fill", 
+             lbls = c('Out of Labor Force', 'Unemployed', 'Employed'),
+             title = "Employment: Black females ages 16-24",
+             y_title = "Percent"  
+             )
+g
+```
+
+
+
+
+
+
+
+
+
+
